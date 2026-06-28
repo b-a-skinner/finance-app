@@ -1,25 +1,33 @@
-import { useEffect, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Dashboard from './pages/Dashboard';
+import Login from './pages/Login';
+import Register from './pages/Register';
 
-function App() {
-  const [summary, setSummary] = useState(null);
-
-  useEffect(() => {
-    fetch("/api/finance/summary")
-      .then((r) => r.json())
-      .then(setSummary)
-      .catch(console.error);
-  }, []);
-
-  return (
-    <div>
-      <h1>Finance App</h1>
-      {summary ? (
-        <pre>{JSON.stringify(summary, null, 2)}</pre>
-      ) : (
-        <p>Loading...</p>
-      )}
-    </div>
-  );
+function ProtectedRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          {/* Any other path → dashboard (ProtectedRoute will redirect to login if needed) */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}
