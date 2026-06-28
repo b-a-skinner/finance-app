@@ -3,7 +3,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Debt, Expense, IncomeSource, PensionPot, SavingsGoal, TaxYearConfig, User
+from app.models import Debt, Expense, IncomeSource, PensionPot, SavingsGoal, TaxYearConfig
+from app.routes.auth import get_current_user
+from app.models.user import User
 from app.services.tax_calculator import calculate_take_home_pay
 
 router = APIRouter(prefix="/finance", tags=["finance"])
@@ -53,23 +55,26 @@ def _to_monthly(amount: float, frequency: str) -> float:
 # Routes
 # ---------------------------------------------------------------------------
 
-@router.get("/summary/{user_id}", response_model=FinancialSummaryOut)
-def get_financial_summary(user_id: int, db: Session = Depends(get_db)):
-    # Confirm user exists
-    if not db.query(User).filter_by(id=user_id).first():
-        raise HTTPException(status_code=404, detail="User not found")
+@router.get("/summary", response_model=FinancialSummaryOut)
+def get_financial_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    user_id = current_user.id
 
-    # Tax config must be seeded before this endpoint is usable
     tax_config = db.query(TaxYearConfig).filter_by(tax_year=CURRENT_TAX_YEAR).first()
     if not tax_config:
-        raise HTTPException(status_code=500, detail=f"Tax config for {CURRENT_TAX_YEAR} not found — run seed.py")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Tax config for {CURRENT_TAX_YEAR} not found — run seed.py",
+        )
 
     # ---- Income ----
+    # Returns 0 gross for new users who haven't added income sources yet
     income_sources = db.query(IncomeSource).filter_by(user_id=user_id, is_active=True).all()
     gross = sum(src.gross_annual_salary for src in income_sources)
 
     # ---- Student loans ----
-    # Collect the plan config from each active student-loan debt that has one assigned.
     # Income-contingent repayments are part of take-home; min_payment on these debts
     # is excluded from monthly_debt_payments below to avoid double-counting.
     loan_plans = [
@@ -90,7 +95,7 @@ def get_financial_summary(user_id: int, db: Session = Depends(get_db)):
     expenses = db.query(Expense).filter_by(user_id=user_id, is_active=True).all()
     monthly_expenses = sum(_to_monthly(e.amount, e.frequency) for e in expenses)
 
-    # Student loan debts are excluded here — their repayment is already in take_home.student_loan
+    # Student loan debts excluded — their repayment is already in take_home.student_loan
     other_debts = (
         db.query(Debt)
         .filter(Debt.user_id == user_id, Debt.is_active == True, Debt.debt_type != "student_loan")
