@@ -36,6 +36,10 @@ class FinancialSummaryOut(BaseModel):
     monthly_debt_payments: float
     monthly_savings_contributions: float
     monthly_disposable: float
+    total_savings_balance: float
+    pension_pot_balance: float
+    total_debt_balance: float
+    net_worth: float
 
 
 # ---------------------------------------------------------------------------
@@ -77,17 +81,20 @@ def get_financial_summary(
     # ---- Student loans ----
     # Income-contingent repayments are part of take-home; min_payment on these debts
     # is excluded from monthly_debt_payments below to avoid double-counting.
-    loan_plans = [
-        debt.student_loan_plan
-        for debt in db.query(Debt).filter_by(user_id=user_id, debt_type="student_loan", is_active=True).all()
-        if debt.student_loan_plan is not None
-    ]
+    student_loan_debts = (
+        db.query(Debt)
+        .filter_by(user_id=user_id, debt_type="student_loan", is_active=True)
+        .all()
+    )
+    loan_plans = [d.student_loan_plan for d in student_loan_debts if d.student_loan_plan is not None]
 
     # ---- Pension ----
-    # Use the first active pension pot. Multi-pot aggregation can be added later.
-    pension = db.query(PensionPot).filter_by(user_id=user_id, is_active=True).first()
-    employee_pct = pension.employee_contribution_pct if pension else 0.0
-    employer_pct = pension.employer_contribution_pct if pension else 0.0
+    # First active pot drives contribution percentages for the take-home calculation.
+    # All active pots are summed for the balance / net worth figures.
+    all_pension_pots = db.query(PensionPot).filter_by(user_id=user_id, is_active=True).all()
+    first_pension = all_pension_pots[0] if all_pension_pots else None
+    employee_pct = first_pension.employee_contribution_pct if first_pension else 0.0
+    employer_pct = first_pension.employer_contribution_pct if first_pension else 0.0
 
     breakdown = calculate_take_home_pay(gross, tax_config, loan_plans, employee_pct, employer_pct)
 
@@ -110,6 +117,14 @@ def get_financial_summary(
         breakdown.net_monthly - monthly_expenses - monthly_debt_payments - monthly_savings, 2
     )
 
+    # ---- Balance / net worth ----
+    all_debts = db.query(Debt).filter_by(user_id=user_id, is_active=True).all()
+
+    total_savings_balance = round(sum(s.current_balance for s in savings_goals), 2)
+    pension_pot_balance = round(sum(p.current_balance for p in all_pension_pots), 2)
+    total_debt_balance = round(sum(d.balance for d in all_debts), 2)
+    net_worth = round(total_savings_balance + pension_pot_balance - total_debt_balance, 2)
+
     return FinancialSummaryOut(
         user_id=user_id,
         tax_year=CURRENT_TAX_YEAR,
@@ -127,4 +142,8 @@ def get_financial_summary(
         monthly_debt_payments=round(monthly_debt_payments, 2),
         monthly_savings_contributions=round(monthly_savings, 2),
         monthly_disposable=monthly_disposable,
+        total_savings_balance=total_savings_balance,
+        pension_pot_balance=pension_pot_balance,
+        total_debt_balance=total_debt_balance,
+        net_worth=net_worth,
     )

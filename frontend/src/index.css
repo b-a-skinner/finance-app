@@ -241,11 +241,17 @@ body {
 /* Cards grid */
 .cards-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 800px) {
+  .cards-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 520px) {
   .cards-grid {
     grid-template-columns: 1fr;
   }
@@ -253,6 +259,27 @@ body {
   .hero-amount {
     font-size: 2.5rem;
   }
+}
+
+/* Net Worth card — visually distinct from the disposable income hero */
+.net-worth-card {
+  border-top: 3px solid #0f766e;
+}
+
+.net-worth-amount {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 1.25rem;
+}
+
+.net-worth-amount.nw-positive {
+  color: #0f766e;
+}
+
+.net-worth-amount.nw-negative {
+  color: var(--color-negative);
 }
 
 .card {
@@ -334,7 +361,273 @@ body {
   color: var(--color-text-muted);
 }
 
-/* Utility */
+/* ── Resource pages (Income, Expenses, Debts, Savings, Pension) ────────── */
+.resource-page {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+}
+
+.resource-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .resource-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Form card */
+.resource-form-card {
+  position: sticky;
+  top: 72px; /* below fixed navbar */
+}
+
+/* Selects match input styling */
+.form-group select {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 1rem;
+  color: var(--color-text);
+  background: var(--color-surface);
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  padding-right: 2.25rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  cursor: pointer;
+}
+
+.form-group select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(26, 58, 92, 0.1);
+}
+
+/* Checkbox row */
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.form-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+}
+
+.form-check label {
+  margin-bottom: 0;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* Form hint text */
+.form-hint {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* Form action row (submit + cancel) */
+.form-actions {
+  display: flex;
+  gap: 0.625rem;
+  margin-top: 1rem;
+}
+
+.form-actions .btn-primary {
+  flex: 1;
+  margin-top: 0;
+}
+
+.btn-secondary {
+  padding: 0.75rem 1rem;
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.btn-secondary:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* Item list */
+.resource-list-card {
+  min-height: 120px;
+}
+
+.item-list {
+  list-style: none;
+}
+
+.item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.item-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.item-row:first-child {
+  padding-top: 0;
+}
+
+.item-row--editing {
+  background: #f0f6ff;
+  margin: 0 -1.5rem;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  border-radius: 6px;
+  border-color: transparent;
+}
+
+.item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.item-name {
+  font-size: 0.95rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.item-detail {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.item-actions {
+  display: flex;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-sm:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.btn-danger {
+  border-color: #fecaca;
+  color: var(--color-negative);
+}
+
+.btn-danger:hover {
+  background: #fef2f2;
+  color: var(--color-negative);
+}
+
+.list-empty {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  padding: 1rem 0;
+}
+
+/* Badge (Fixed/Variable, debt type) */
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-neutral {
+  background: #f3f4f6;
+  color: var(--color-text-muted);
+}
+
+.badge-variable {
+  background: #fef9c3;
+  color: #92400e;
+}
+
+/* Savings progress bar */
+.item-row--savings .item-info {
+  gap: 0.35rem;
+}
+
+.savings-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.progress-bar-track {
+  flex: 1;
+  height: 6px;
+  background: var(--color-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--color-positive);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.savings-pct {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+/* ── Utility ──────────────────────────────────────────────── */
 .page-loading {
   display: flex;
   align-items: center;

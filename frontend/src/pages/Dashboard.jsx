@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import { useAuth } from '../context/AuthContext';
 
@@ -38,7 +39,11 @@ export default function Dashboard() {
     );
   }
 
-  const { take_home: t, monthly_disposable, monthly_expenses, monthly_debt_payments, monthly_savings_contributions } = summary;
+  const {
+    take_home: t,
+    monthly_disposable, monthly_expenses, monthly_debt_payments, monthly_savings_contributions,
+    total_savings_balance, pension_pot_balance, total_debt_balance, net_worth,
+  } = summary;
   const hasIncome = t.gross_annual > 0;
   const totalOutgoings = monthly_expenses + monthly_debt_payments + monthly_savings_contributions;
 
@@ -53,9 +58,9 @@ export default function Dashboard() {
               You haven't added any income sources yet. Once you do, you'll see your full
               take-home breakdown, deductions, and monthly disposable income here.
             </p>
-            <span className="empty-hint">
-              Use the API to add an income source at <code>POST /api/income</code>
-            </span>
+            <Link to="/income" className="btn-primary" style={{ display: 'inline-block', width: 'auto', textDecoration: 'none' }}>
+              Add your first income source
+            </Link>
           </div>
         ) : (
           <>
@@ -69,6 +74,36 @@ export default function Dashboard() {
             </div>
 
             <div className="cards-grid">
+              {/* ── Net Worth ── */}
+              <div className="card net-worth-card">
+                <p className="card-title">Net Worth</p>
+                <p className={`net-worth-amount ${net_worth >= 0 ? 'nw-positive' : 'nw-negative'}`}>
+                  {gbp(net_worth)}
+                </p>
+                <table className="breakdown">
+                  <tbody>
+                    <tr>
+                      <td>Savings</td>
+                      <td>{gbp(total_savings_balance)}</td>
+                    </tr>
+                    <tr>
+                      <td>Pension pot</td>
+                      <td>{gbp(pension_pot_balance)}</td>
+                    </tr>
+                    <tr className="row-muted">
+                      <td>Total debt</td>
+                      <td>−{gbp(total_debt_balance)}</td>
+                    </tr>
+                    <tr className="row-total">
+                      <td>Net worth</td>
+                      <td style={{ color: net_worth >= 0 ? '#0f766e' : 'var(--color-negative)' }}>
+                        {gbp(net_worth)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
               {/* ── Income & deductions ── */}
               <div className="card">
                 <p className="card-title">Income &amp; Deductions</p>
