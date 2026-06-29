@@ -46,3 +46,33 @@ class StudentLoanPlanConfig(Base):
     threshold: Mapped[float] = mapped_column(Float, nullable=False)      # annual repayment threshold (GBP)
     repayment_rate_pct: Mapped[float] = mapped_column(Float, nullable=False)
     write_off_years: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
+class AgeBenchmarkSalary(Base):
+    """UK median monthly salary by age band (ONS)."""
+
+    __tablename__ = "age_benchmark_salary"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    age_band: Mapped[str] = mapped_column(String(20), nullable=False)     # e.g. "25-34"
+    min_age: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # null = open-ended top band
+    median_monthly_salary: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_metric: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
+class AgeBenchmarkPension(Base):
+    """UK median pension pot by age band (ONS Wealth and Assets Survey).
+    median_pension_pot is nullable — some bands don't yet have confirmed figures.
+    """
+
+    __tablename__ = "age_benchmark_pension"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    age_band: Mapped[str] = mapped_column(String(20), nullable=False)
+    min_age: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    median_pension_pot: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_metric: Mapped[str] = mapped_column(String(255), nullable=False)

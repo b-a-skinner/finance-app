@@ -213,3 +213,26 @@ class ProfileOut(BaseModel):
     occupation: str | None
     postcode_outward: str | None
     region: str | None
+
+
+# ---------------------------------------------------------------------------
+# AgeComparison
+# ---------------------------------------------------------------------------
+
+class AgeComparisonOut(BaseModel):
+    user_age: int | None
+    current_monthly_salary: float
+    current_pension_pot: float
+    # Salary
+    salary_band_label: str | None
+    median_monthly_salary: float | None
+    salary_comparison_pct: float | None
+    salary_source: str | None
+    salary_source_metric: str | None
+    # Pension
+    pension_band_label: str | None
+    median_pension_pot: float | None
+    pension_comparison_pct: float | None
+    pension_data_available: bool
+    pension_source: str | None
+    pension_source_metric: str | None

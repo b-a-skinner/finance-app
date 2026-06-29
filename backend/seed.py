@@ -4,7 +4,7 @@ Run once after `alembic upgrade head`:
     python seed.py        (from backend/ with .venv active)
 """
 from app.database import SessionLocal
-from app.models import StudentLoanPlanConfig, TaxYearConfig
+from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, StudentLoanPlanConfig, TaxYearConfig
 
 
 def seed() -> None:
@@ -45,6 +45,30 @@ def seed() -> None:
 
         db.commit()
         print("Seeded TaxYearConfig and 5 StudentLoanPlanConfig rows for 2026/27.")
+
+        # Seed age benchmarks (idempotent: skip if already present)
+        if not db.query(AgeBenchmarkSalary).first():
+            _SAL = "ONS, May 2026"
+            _SAL_M = "all employees, median monthly pay before tax"
+            db.add_all([
+                AgeBenchmarkSalary(age_band="18-24", min_age=18, max_age=24,  median_monthly_salary=1830, source=_SAL, source_metric=_SAL_M),
+                AgeBenchmarkSalary(age_band="25-34", min_age=25, max_age=34,  median_monthly_salary=2820, source=_SAL, source_metric=_SAL_M),
+                AgeBenchmarkSalary(age_band="35-49", min_age=35, max_age=49,  median_monthly_salary=3062, source=_SAL, source_metric=_SAL_M),
+                AgeBenchmarkSalary(age_band="50-64", min_age=50, max_age=64,  median_monthly_salary=2698, source=_SAL, source_metric=_SAL_M),
+                AgeBenchmarkSalary(age_band="65+",   min_age=65, max_age=None, median_monthly_salary=1582, source=_SAL, source_metric=_SAL_M),
+            ])
+            _PEN = "ONS Wealth and Assets Survey"
+            _PEN_M = "median pension wealth, individual"
+            db.add_all([
+                AgeBenchmarkPension(age_band="Under 25", min_age=0,  max_age=24, median_pension_pot=5500,   source=_PEN, source_metric=_PEN_M),
+                AgeBenchmarkPension(age_band="25-34",    min_age=25, max_age=34, median_pension_pot=18800,  source=_PEN, source_metric=_PEN_M),
+                AgeBenchmarkPension(age_band="35-44",    min_age=35, max_age=44, median_pension_pot=39500,  source=_PEN, source_metric=_PEN_M),
+                AgeBenchmarkPension(age_band="45-54",    min_age=45, max_age=54, median_pension_pot=None,   source=_PEN, source_metric=_PEN_M),
+                AgeBenchmarkPension(age_band="55-64",    min_age=55, max_age=64, median_pension_pot=None,   source=_PEN, source_metric=_PEN_M),
+                AgeBenchmarkPension(age_band="65-74",    min_age=65, max_age=74, median_pension_pot=145900, source=_PEN, source_metric=_PEN_M),
+            ])
+            db.commit()
+            print("Seeded age benchmark tables.")
     finally:
         db.close()
 

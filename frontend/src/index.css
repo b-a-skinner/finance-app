@@ -767,3 +767,53 @@ body {
   margin-top: 0.25rem;
   font-style: italic;
 }
+
+/* ── Age benchmark comparison ─────────────────────────────────────────────── */
+
+.benchmark-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.benchmark-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem;
+  background: var(--color-bg);
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+}
+
+.benchmark-row-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.benchmark-text {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.benchmark-unavailable {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.benchmark-source {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.benchmark-prompt {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  margin: 0;
+}

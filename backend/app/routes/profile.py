@@ -1,10 +1,14 @@
+import dataclasses
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, IncomeSource, PensionPot
 from app.models.user import User
 from app.routes.auth import get_current_user
-from app.schemas import ProfileOut, ProfileUpdate
+from app.schemas import AgeComparisonOut, ProfileOut, ProfileUpdate
+from app.services.age_benchmark import get_age_comparison
 from app.services.postcode_lookup import get_region_from_postcode
 
 router = APIRouter(prefix="/profile", tags=["profile"])
@@ -35,3 +39,35 @@ def update_profile(
     db.commit()
     db.refresh(current_user)
     return _to_out(current_user)
+
+
+@router.get("/comparison", response_model=AgeComparisonOut)
+def get_profile_comparison(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    salary_benchmarks = db.query(AgeBenchmarkSalary).order_by(AgeBenchmarkSalary.min_age).all()
+    pension_benchmarks = db.query(AgeBenchmarkPension).order_by(AgeBenchmarkPension.min_age).all()
+
+    monthly_salary = sum(
+        s.gross_annual_salary / 12
+        for s in db.query(IncomeSource).filter_by(user_id=current_user.id, is_active=True).all()
+    )
+    pension_pot = sum(
+        p.current_balance
+        for p in db.query(PensionPot).filter_by(user_id=current_user.id, is_active=True).all()
+    )
+
+    result = get_age_comparison(
+        date_of_birth=current_user.date_of_birth,
+        current_monthly_salary=monthly_salary,
+        current_pension_pot=pension_pot,
+        salary_benchmarks=salary_benchmarks,
+        pension_benchmarks=pension_benchmarks,
+    )
+
+    return AgeComparisonOut(
+        **dataclasses.asdict(result),
+        current_monthly_salary=monthly_salary,
+        current_pension_pot=pension_pot,
+    )
