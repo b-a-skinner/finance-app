@@ -43,9 +43,33 @@ export default function Dashboard() {
     take_home: t,
     monthly_disposable, monthly_expenses, monthly_debt_payments, monthly_savings_contributions,
     total_savings_balance, pension_pot_balance, total_debt_balance, net_worth,
+    months_of_runway,
   } = summary;
   const hasIncome = t.gross_annual > 0;
   const totalOutgoings = monthly_expenses + monthly_debt_payments + monthly_savings_contributions;
+
+  function formatRunway(months) {
+    const whole = Math.floor(months);
+    const days = Math.round((months - whole) * 30.44);
+    const mo = n => `${n} ${n === 1 ? 'month' : 'months'}`;
+    const dy = n => `${n} ${n === 1 ? 'day' : 'days'}`;
+    if (whole === 0) return dy(days);
+    if (days === 0) return mo(whole);
+    return `${mo(whole)}, ${dy(days)}`;
+  }
+
+  function runwayTier(months) {
+    if (months < 1) return 'runway-low';
+    if (months < 3) return 'runway-mid';
+    return 'runway-good';
+  }
+
+  function runwayContext(months) {
+    if (months < 1) return "Less than a month's cover — your savings don't yet match a full month of expenses.";
+    if (months < 3) return "Covers a short disruption — an unexpected repair, a month between jobs.";
+    if (months < 6) return "A meaningful cushion. Enough to absorb several months of reduced or no income.";
+    return "Over 6 months of cover — a strong position relative to your current spending.";
+  }
 
   return (
     <>
@@ -190,6 +214,28 @@ export default function Dashboard() {
                 </table>
               </div>
             </div>
+
+            {/* ── Emergency fund runway ── */}
+            {months_of_runway === null ? (
+              <div className="card runway-card runway-card--null">
+                <p className="card-title">Emergency Fund Coverage</p>
+                <p className="runway-prompt">
+                  Add your <Link to="/expenses" className="runway-link">monthly expenses</Link> to see how long your savings would last.
+                </p>
+              </div>
+            ) : (
+              <div className={`card runway-card ${runwayTier(months_of_runway)}`}>
+                <p className="card-title">Emergency Fund Coverage</p>
+                <div className="runway-header">
+                  <span className={`runway-months ${runwayTier(months_of_runway)}`}>
+                    {formatRunway(months_of_runway)}
+                  </span>
+                  <span className="runway-sub">of expenses covered by savings</span>
+                </div>
+                <p className="runway-supporting">based on {gbp(monthly_expenses)}/month in expenses</p>
+                <p className="runway-context">{runwayContext(months_of_runway)}</p>
+              </div>
+            )}
           </>
         )}
       </main>

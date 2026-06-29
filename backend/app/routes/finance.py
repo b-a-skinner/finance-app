@@ -40,6 +40,7 @@ class FinancialSummaryOut(BaseModel):
     pension_pot_balance: float
     total_debt_balance: float
     net_worth: float
+    months_of_runway: float | None
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +126,12 @@ def get_financial_summary(
     total_debt_balance = round(sum(d.balance for d in all_debts), 2)
     net_worth = round(total_savings_balance + pension_pot_balance - total_debt_balance, 2)
 
+    months_of_runway = (
+        round(total_savings_balance / monthly_expenses, 1)
+        if monthly_expenses > 0
+        else None
+    )
+
     return FinancialSummaryOut(
         user_id=user_id,
         tax_year=CURRENT_TAX_YEAR,
@@ -146,4 +153,5 @@ def get_financial_summary(
         pension_pot_balance=pension_pot_balance,
         total_debt_balance=total_debt_balance,
         net_worth=net_worth,
+        months_of_runway=months_of_runway,
     )

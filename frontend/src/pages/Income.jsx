@@ -3,7 +3,7 @@ import NavBar from '../components/NavBar';
 import { useResource } from '../hooks/useResource';
 
 const EMPTY = { label: '', gross_annual_salary: '', pay_frequency: 'annual' };
-const FREQ = { annual: 'per year', monthly: 'per month', weekly: 'per week' };
+const PAY_LABEL = { annual: 'annually', monthly: 'monthly', weekly: 'weekly' };
 
 const gbp = n => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
 
@@ -142,7 +142,7 @@ export default function Income() {
                   <li key={item.id} className={`item-row${editingId === item.id ? ' item-row--editing' : ''}`}>
                     <div className="item-info">
                       <span className="item-name">{item.label}</span>
-                      <span className="item-detail">{gbp(item.gross_annual_salary)} {FREQ[item.pay_frequency]}</span>
+                      <span className="item-detail">{gbp(item.gross_annual_salary)}/year · Paid {PAY_LABEL[item.pay_frequency]}</span>
                     </div>
                     <div className="item-actions">
                       <button className="btn-sm" onClick={() => startEdit(item)}>Edit</button>

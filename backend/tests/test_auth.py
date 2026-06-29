@@ -198,3 +198,72 @@ class TestNetWorthSummary:
         body = client.get(SUMMARY, headers=headers).json()
         assert body["pension_pot_balance"] == 16000.0
         assert body["net_worth"] == 16000.0
+
+
+# ---------------------------------------------------------------------------
+# Finance summary — months of runway
+# ---------------------------------------------------------------------------
+
+class TestMonthsOfRunway:
+    def test_no_expenses_returns_null(self, client, db):
+        _seed_tax_config(db)
+        _register(client)
+        body = client.get(SUMMARY, headers=_auth_header(client)).json()
+        assert body["months_of_runway"] is None
+
+    def test_no_savings_returns_zero(self, client, db):
+        _seed_tax_config(db)
+        _register(client)
+        headers = _auth_header(client)
+        # £1,200/month expenses, no savings
+        client.post("/api/expenses", json={
+            "category": "Rent", "amount": 1200.0, "frequency": "monthly", "is_fixed": True,
+        }, headers=headers)
+        body = client.get(SUMMARY, headers=headers).json()
+        assert body["months_of_runway"] == 0.0
+
+    def test_runway_rounds_to_one_decimal(self, client, db):
+        _seed_tax_config(db)
+        _register(client)
+        headers = _auth_header(client)
+        # £5,000 savings / £1,200/month = 4.1667 → rounds to 4.2
+        client.post("/api/savings", json={
+            "name": "Emergency fund", "current_balance": 5000.0,
+            "target_amount": 10000.0, "monthly_contribution": 0.0,
+        }, headers=headers)
+        client.post("/api/expenses", json={
+            "category": "Rent", "amount": 1200.0, "frequency": "monthly", "is_fixed": True,
+        }, headers=headers)
+        body = client.get(SUMMARY, headers=headers).json()
+        assert body["months_of_runway"] == 4.2
+
+    def test_runway_exact_months(self, client, db):
+        _seed_tax_config(db)
+        _register(client)
+        headers = _auth_header(client)
+        # £3,000 savings / £1,000/month = exactly 3.0
+        client.post("/api/savings", json={
+            "name": "Emergency fund", "current_balance": 3000.0,
+            "target_amount": 5000.0, "monthly_contribution": 0.0,
+        }, headers=headers)
+        client.post("/api/expenses", json={
+            "category": "Expenses", "amount": 1000.0, "frequency": "monthly", "is_fixed": True,
+        }, headers=headers)
+        body = client.get(SUMMARY, headers=headers).json()
+        assert body["months_of_runway"] == 3.0
+
+    def test_runway_uses_monthly_equivalent_of_annual_expense(self, client, db):
+        # Confirms _to_monthly() is applied before dividing
+        _seed_tax_config(db)
+        _register(client)
+        headers = _auth_header(client)
+        # £12,000 annual expense = £1,000/month; £6,000 savings → 6.0 months
+        client.post("/api/savings", json={
+            "name": "Fund", "current_balance": 6000.0,
+            "target_amount": 10000.0, "monthly_contribution": 0.0,
+        }, headers=headers)
+        client.post("/api/expenses", json={
+            "category": "Annual bills", "amount": 12000.0, "frequency": "annual", "is_fixed": True,
+        }, headers=headers)
+        body = client.get(SUMMARY, headers=headers).json()
+        assert body["months_of_runway"] == 6.0
