@@ -377,7 +377,6 @@ body {
   align-items: baseline;
   gap: 0.625rem;
   margin-bottom: 0.375rem;
-  flex-wrap: wrap;
 }
 
 .runway-months {
@@ -444,6 +443,10 @@ body {
   grid-template-columns: 340px 1fr;
   gap: 1.25rem;
   align-items: start;
+}
+
+.resource-layout--single {
+  grid-template-columns: minmax(0, 480px);
 }
 
 @media (max-width: 720px) {
@@ -589,7 +592,6 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
 }
 
 .item-detail {
@@ -713,3 +715,4 @@ body {
   text-align: center;
   font-size: 0.9rem;
 }
+

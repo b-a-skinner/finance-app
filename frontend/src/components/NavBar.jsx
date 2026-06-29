@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { to: '/assets', label: 'Assets' },
   { to: '/savings', label: 'Savings' },
   { to: '/pension', label: 'Pension' },
+  { to: '/profile', label: 'Profile' },
 ];
 
 export default function NavBar() {

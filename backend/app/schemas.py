@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict
+from datetime import date
+
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.models.finance import PayFrequency
 
@@ -86,80 +88,3 @@ class DebtOut(BaseModel):
     student_loan_plan_id: int | None
     is_active: bool
 
-
-# ---------------------------------------------------------------------------
-# SavingsGoal
-# ---------------------------------------------------------------------------
-
-class SavingsCreate(BaseModel):
-    name: str
-    current_balance: float
-    target_amount: float
-    monthly_contribution: float
-
-
-class SavingsUpdate(BaseModel):
-    name: str | None = None
-    current_balance: float | None = None
-    target_amount: float | None = None
-    monthly_contribution: float | None = None
-
-
-class SavingsOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    name: str
-    current_balance: float
-    target_amount: float
-    monthly_contribution: float
-    is_active: bool
-
-
-# ---------------------------------------------------------------------------
-# PensionPot
-# ---------------------------------------------------------------------------
-
-class PensionCreate(BaseModel):
-    current_balance: float
-    employee_contribution_pct: float
-    employer_contribution_pct: float
-
-
-class PensionUpdate(BaseModel):
-    current_balance: float | None = None
-    employee_contribution_pct: float | None = None
-    employer_contribution_pct: float | None = None
-
-
-class PensionOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    current_balance: float
-    employee_contribution_pct: float
-    employer_contribution_pct: float
-    is_active: bool
-
-
-# ---------------------------------------------------------------------------
-# Asset
-# ---------------------------------------------------------------------------
-
-class AssetCreate(BaseModel):
-    name: str
-    asset_type: str
-    current_value: float
-
-
-class AssetUpdate(BaseModel):
-    name: str | None = None
-    asset_type: str | None = None
-    current_value: float | None = None
-
-
-class AssetOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    name: str
-    asset_type: str
-    current_value: float
-    is_active: bool

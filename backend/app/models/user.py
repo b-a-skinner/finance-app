@@ -1,6 +1,7 @@
+from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
+from sqlalchemy import Date, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -18,6 +19,10 @@ class User(TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     country: Mapped[str] = mapped_column(String(10), default="UK", nullable=False)
+
+    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
+    occupation: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    postcode_outward: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
     income_sources: Mapped[list["IncomeSource"]] = relationship(back_populates="user")
     expenses: Mapped[list["Expense"]] = relationship(back_populates="user")

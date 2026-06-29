@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Assets from './pages/Assets';
 import Dashboard from './pages/Dashboard';
+import Profile from './pages/Profile';
 import Debts from './pages/Debts';
 import Expenses from './pages/Expenses';
 import Income from './pages/Income';
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/assets" element={<P><Assets /></P>} />
           <Route path="/savings" element={<P><Savings /></P>} />
           <Route path="/pension" element={<P><Pension /></P>} />
+          <Route path="/profile" element={<P><Profile /></P>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
