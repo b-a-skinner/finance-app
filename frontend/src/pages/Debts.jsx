@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import NavBar from '../components/NavBar';
+import { useAuth } from '../context/AuthContext';
 import { useResource } from '../hooks/useResource';
 
 const EMPTY = {
@@ -8,6 +9,7 @@ const EMPTY = {
   interest_rate: '',
   min_payment: '',
   student_loan_plan_id: '',
+  graduation_year: '',
 };
 
 const DEBT_TYPE_LABEL = {
@@ -21,8 +23,11 @@ const gbp = n => new Intl.NumberFormat('en-GB', { style: 'currency', currency: '
 const pct = n => `${n}%`;
 
 export default function Debts() {
+  const { apiFetch } = useAuth();
   const { items, loading, error, create, update, remove } = useResource('/api/debts');
   const [loanPlans, setLoanPlans] = useState([]);
+  const [projections, setProjections] = useState({});
+  const [dob, setDob] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -36,6 +41,29 @@ export default function Debts() {
       .catch(() => {});
   }, []);
 
+  // Fetch user's date_of_birth for age display in projection
+  useEffect(() => {
+    apiFetch('/api/profile')
+      .then(r => r.json())
+      .then(data => setDob(data.date_of_birth || null))
+      .catch(() => {});
+  }, [apiFetch]);
+
+  // Fetch projection for every student loan debt that has a graduation_year
+  useEffect(() => {
+    const eligible = items.filter(
+      d => d.debt_type === 'student_loan' && d.graduation_year
+    );
+    eligible.forEach(debt => {
+      apiFetch(`/api/debts/${debt.id}/projection`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data) setProjections(prev => ({ ...prev, [debt.id]: data }));
+        })
+        .catch(() => {});
+    });
+  }, [items, apiFetch]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function field(key, val) {
     setForm(prev => ({ ...prev, [key]: val }));
   }
@@ -48,6 +76,7 @@ export default function Debts() {
       interest_rate: item.interest_rate,
       min_payment: item.min_payment,
       student_loan_plan_id: item.student_loan_plan_id ?? '',
+      graduation_year: item.graduation_year ?? '',
     });
     setFormError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -81,6 +110,9 @@ export default function Debts() {
       student_loan_plan_id: form.debt_type === 'student_loan'
         ? parseInt(form.student_loan_plan_id, 10)
         : null,
+      graduation_year: form.debt_type === 'student_loan' && form.graduation_year
+        ? parseInt(form.graduation_year, 10)
+        : null,
     };
     setSaving(true);
     try {
@@ -100,12 +132,65 @@ export default function Debts() {
 
   async function handleDelete(id) {
     setActionError('');
+    setProjections(prev => { const n = { ...prev }; delete n[id]; return n; });
     try { await remove(id); } catch (err) { setActionError(err.message); }
   }
 
   function planName(id) {
     const plan = loanPlans.find(p => p.id === id);
     return plan ? plan.plan_name : `Plan ${id}`;
+  }
+
+  function ageAt(dateStr) {
+    if (!dob || !dateStr) return null;
+    const birth = new Date(dob);
+    const target = new Date(dateStr);
+    let age = target.getFullYear() - birth.getFullYear();
+    const m = target.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && target.getDate() < birth.getDate())) age--;
+    return age;
+  }
+
+  function ProjectionBlock({ debt }) {
+    const p = projections[debt.id];
+    if (!p) return null;
+
+    if (p.outcome === 'paid_off') {
+      const payoffYear = new Date(p.payoff_date).getFullYear();
+      const age = ageAt(p.payoff_date);
+      return (
+        <div className="projection-block projection-block--good">
+          <p className="projection-headline">
+            On your current salary, you're projected to clear this loan around{' '}
+            <strong>{payoffYear}</strong>
+            {age != null ? ` (age ${age})` : ''}.
+          </p>
+          <p className="projection-assumption">
+            Estimate assumes your current salary ({gbp(p.annual_salary_assumption)}/yr) stays the same
+            and today's interest rate doesn't change — your real result will vary.
+          </p>
+        </div>
+      );
+    }
+
+    const writeOffYear = new Date(p.write_off_date).getFullYear();
+    return (
+      <div className="projection-block projection-block--neutral">
+        <p className="projection-headline">
+          On your current salary, you're unlikely to clear this loan before it's written off
+          in <strong>{writeOffYear}</strong>. Estimated remaining balance at that point:{' '}
+          <strong>{gbp(p.remaining_balance_at_writeoff)}</strong>.
+        </p>
+        <p className="projection-note">
+          This isn't necessarily bad news — many borrowers are in this position, and the
+          remaining balance is simply cancelled with no further action needed.
+        </p>
+        <p className="projection-assumption">
+          Estimate assumes your current salary ({gbp(p.annual_salary_assumption)}/yr) stays the same
+          and today's interest rate doesn't change — your real result will vary.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -135,19 +220,37 @@ export default function Debts() {
                 </select>
               </div>
               {form.debt_type === 'student_loan' && (
-                <div className="form-group">
-                  <label htmlFor="debt-plan">Student loan plan</label>
-                  <select
-                    id="debt-plan"
-                    value={form.student_loan_plan_id}
-                    onChange={e => field('student_loan_plan_id', e.target.value)}
-                  >
-                    <option value="">Select plan…</option>
-                    {loanPlans.map(p => (
-                      <option key={p.id} value={p.id}>{p.plan_name}</option>
-                    ))}
-                  </select>
-                </div>
+                <>
+                  <div className="form-group">
+                    <label htmlFor="debt-plan">Student loan plan</label>
+                    <select
+                      id="debt-plan"
+                      value={form.student_loan_plan_id}
+                      onChange={e => field('student_loan_plan_id', e.target.value)}
+                    >
+                      <option value="">Select plan…</option>
+                      {loanPlans.map(p => (
+                        <option key={p.id} value={p.id}>{p.plan_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="debt-grad-year">Year you graduated (or left university)</label>
+                    <input
+                      id="debt-grad-year"
+                      type="number"
+                      min="1990"
+                      max="2050"
+                      step="1"
+                      value={form.graduation_year}
+                      onChange={e => field('graduation_year', e.target.value)}
+                      placeholder="e.g. 2019"
+                    />
+                    <span className="form-hint">
+                      Used to calculate your projected repayment period. Repayments begin April 6 the following year.
+                    </span>
+                  </div>
+                </>
               )}
               <div className="form-group">
                 <label htmlFor="debt-balance">Outstanding balance (£)</label>
@@ -219,6 +322,9 @@ export default function Debts() {
                         {item.debt_type === 'student_loan' && item.student_loan_plan_id && (
                           <span className="badge badge-neutral">{planName(item.student_loan_plan_id)}</span>
                         )}
+                        {item.debt_type === 'student_loan' && item.graduation_year && (
+                          <span className="badge badge-neutral">Graduated {item.graduation_year}</span>
+                        )}
                       </span>
                       <span className="item-detail">
                         {gbp(item.balance)} balance · {pct(item.interest_rate)} · {gbp(item.min_payment)}/mo minimum
@@ -228,6 +334,14 @@ export default function Debts() {
                       <button className="btn-sm" onClick={() => startEdit(item)}>Edit</button>
                       <button className="btn-sm btn-danger" onClick={() => handleDelete(item.id)}>Delete</button>
                     </div>
+                    {item.debt_type === 'student_loan' && item.graduation_year && (
+                      <ProjectionBlock debt={item} />
+                    )}
+                    {item.debt_type === 'student_loan' && !item.graduation_year && (
+                      <p className="projection-prompt">
+                        Add your graduation year above to see a repayment projection.
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>

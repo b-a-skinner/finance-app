@@ -1,4 +1,6 @@
-from sqlalchemy import Float, String
+from typing import Optional
+
+from sqlalchemy import Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -43,3 +45,4 @@ class StudentLoanPlanConfig(Base):
     tax_year: Mapped[str] = mapped_column(String(10), nullable=False)    # e.g. "2026/27"
     threshold: Mapped[float] = mapped_column(Float, nullable=False)      # annual repayment threshold (GBP)
     repayment_rate_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    write_off_years: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

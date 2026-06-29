@@ -36,11 +36,11 @@ def seed() -> None:
         ))
 
         db.add_all([
-            StudentLoanPlanConfig(plan_name="Plan 1",       tax_year="2026/27", threshold=26900, repayment_rate_pct=9),
-            StudentLoanPlanConfig(plan_name="Plan 2",       tax_year="2026/27", threshold=29385, repayment_rate_pct=9),
-            StudentLoanPlanConfig(plan_name="Plan 4",       tax_year="2026/27", threshold=33795, repayment_rate_pct=9),
-            StudentLoanPlanConfig(plan_name="Plan 5",       tax_year="2026/27", threshold=25000, repayment_rate_pct=9),
-            StudentLoanPlanConfig(plan_name="Postgraduate", tax_year="2026/27", threshold=21000, repayment_rate_pct=6),
+            StudentLoanPlanConfig(plan_name="Plan 1",       tax_year="2026/27", threshold=26900, repayment_rate_pct=9, write_off_years=25),
+            StudentLoanPlanConfig(plan_name="Plan 2",       tax_year="2026/27", threshold=29385, repayment_rate_pct=9, write_off_years=30),
+            StudentLoanPlanConfig(plan_name="Plan 4",       tax_year="2026/27", threshold=33795, repayment_rate_pct=9, write_off_years=30),
+            StudentLoanPlanConfig(plan_name="Plan 5",       tax_year="2026/27", threshold=25000, repayment_rate_pct=9, write_off_years=40),
+            StudentLoanPlanConfig(plan_name="Postgraduate", tax_year="2026/27", threshold=21000, repayment_rate_pct=6, write_off_years=30),
         ])
 
         db.commit()

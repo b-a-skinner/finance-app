@@ -371,3 +371,127 @@ class TestMonthsOfRunway:
         body = client.get(SUMMARY, headers=headers).json()
         # Student loan doesn't affect runway denominator → still £6,000 / £1,000 = 6.0 months
         assert body["months_of_runway"] == 6.0
+
+
+# ---------------------------------------------------------------------------
+# Debt projection endpoint
+# ---------------------------------------------------------------------------
+
+class TestDebtProjectionEndpoint:
+    def _seed_plan(self, db, write_off_years=30):
+        from app.models.config import StudentLoanPlanConfig
+        plan = StudentLoanPlanConfig(
+            plan_name="Plan 2", tax_year="2026/27",
+            threshold=29385, repayment_rate_pct=9, write_off_years=write_off_years,
+        )
+        db.add(plan)
+        db.commit()
+        return db.query(StudentLoanPlanConfig).first().id
+
+    def test_projection_paid_off_for_high_earner(self, client, db):
+        _seed_tax_config(db)
+        plan_id = self._seed_plan(db)
+        _register(client)
+        headers = _auth_header(client)
+
+        client.post("/api/income", json={
+            "label": "Salary", "gross_annual_salary": 80_000.0, "pay_frequency": "monthly",
+        }, headers=headers)
+        debt_resp = client.post("/api/debts", json={
+            "debt_type": "student_loan", "balance": 20_000.0, "interest_rate": 7.3,
+            "min_payment": 0.0, "student_loan_plan_id": plan_id, "graduation_year": 2020,
+        }, headers=headers)
+        debt_id = debt_resp.json()["id"]
+
+        body = client.get(f"/api/debts/{debt_id}/projection", headers=headers).json()
+        assert body["outcome"] == "paid_off"
+        assert body["payoff_date"] is not None
+        assert body["remaining_balance_at_writeoff"] == 0.0
+        assert body["annual_salary_assumption"] == 80_000.0
+
+    def test_projection_written_off_for_average_earner(self, client, db):
+        _seed_tax_config(db)
+        plan_id = self._seed_plan(db)
+        _register(client)
+        headers = _auth_header(client)
+
+        client.post("/api/income", json={
+            "label": "Salary", "gross_annual_salary": 30_000.0, "pay_frequency": "monthly",
+        }, headers=headers)
+        debt_resp = client.post("/api/debts", json={
+            "debt_type": "student_loan", "balance": 60_000.0, "interest_rate": 7.3,
+            "min_payment": 0.0, "student_loan_plan_id": plan_id, "graduation_year": 2020,
+        }, headers=headers)
+        debt_id = debt_resp.json()["id"]
+
+        body = client.get(f"/api/debts/{debt_id}/projection", headers=headers).json()
+        assert body["outcome"] == "written_off"
+        assert body["payoff_date"] is None
+        assert body["remaining_balance_at_writeoff"] > 60_000.0
+
+    def test_projection_requires_graduation_year(self, client, db):
+        _seed_tax_config(db)
+        plan_id = self._seed_plan(db)
+        _register(client)
+        headers = _auth_header(client)
+        debt_resp = client.post("/api/debts", json={
+            "debt_type": "student_loan", "balance": 30_000.0, "interest_rate": 7.3,
+            "min_payment": 0.0, "student_loan_plan_id": plan_id,
+        }, headers=headers)
+        debt_id = debt_resp.json()["id"]
+        resp = client.get(f"/api/debts/{debt_id}/projection", headers=headers)
+        assert resp.status_code == 400
+
+    def test_projection_rejects_non_student_loan(self, client, db):
+        _seed_tax_config(db)
+        _register(client)
+        headers = _auth_header(client)
+        debt_resp = client.post("/api/debts", json={
+            "debt_type": "credit_card", "balance": 5_000.0,
+            "interest_rate": 22.0, "min_payment": 150.0,
+        }, headers=headers)
+        debt_id = debt_resp.json()["id"]
+        resp = client.get(f"/api/debts/{debt_id}/projection", headers=headers)
+        assert resp.status_code == 400
+
+    def test_projection_uses_sum_of_all_income_sources(self, client, db):
+        _seed_tax_config(db)
+        plan_id = self._seed_plan(db)
+        _register(client)
+        headers = _auth_header(client)
+
+        # Two income sources that together push past the threshold enough to pay off
+        client.post("/api/income", json={
+            "label": "Job 1", "gross_annual_salary": 40_000.0, "pay_frequency": "monthly",
+        }, headers=headers)
+        client.post("/api/income", json={
+            "label": "Job 2", "gross_annual_salary": 40_000.0, "pay_frequency": "monthly",
+        }, headers=headers)
+        debt_resp = client.post("/api/debts", json={
+            "debt_type": "student_loan", "balance": 20_000.0, "interest_rate": 7.3,
+            "min_payment": 0.0, "student_loan_plan_id": plan_id, "graduation_year": 2020,
+        }, headers=headers)
+        debt_id = debt_resp.json()["id"]
+
+        body = client.get(f"/api/debts/{debt_id}/projection", headers=headers).json()
+        assert body["annual_salary_assumption"] == 80_000.0
+        assert body["outcome"] == "paid_off"
+
+    def test_projection_isolated_between_users(self, client, db):
+        _seed_tax_config(db)
+        plan_id = self._seed_plan(db)
+        bob = {"email": "bob@example.com", "password": "bobpass1"}
+        _register(client)
+        client.post("/api/auth/register", json=bob)
+        alice_headers = _auth_header(client)
+        bob_headers = _auth_header(client, bob)
+
+        debt_resp = client.post("/api/debts", json={
+            "debt_type": "student_loan", "balance": 20_000.0, "interest_rate": 7.3,
+            "min_payment": 0.0, "student_loan_plan_id": plan_id, "graduation_year": 2020,
+        }, headers=alice_headers)
+        alice_debt_id = debt_resp.json()["id"]
+
+        # Bob cannot access Alice's debt projection (404, not 403, to prevent data leakage)
+        resp = client.get(f"/api/debts/{alice_debt_id}/projection", headers=bob_headers)
+        assert resp.status_code == 404

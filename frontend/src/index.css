@@ -377,6 +377,7 @@ body {
   align-items: baseline;
   gap: 0.625rem;
   margin-bottom: 0.375rem;
+  flex-wrap: wrap;
 }
 
 .runway-months {
@@ -554,6 +555,7 @@ body {
 
 .item-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 0.75rem;
   padding: 0.875rem 0;
@@ -592,6 +594,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .item-detail {
@@ -716,3 +719,51 @@ body {
   font-size: 0.9rem;
 }
 
+/* ── Student loan projection blocks ── */
+.projection-block {
+  flex: 0 0 100%;
+  margin-top: 0.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  border-left: 3px solid;
+  background: var(--color-surface);
+}
+
+.projection-block--good {
+  border-color: var(--color-positive);
+  background: color-mix(in srgb, var(--color-positive) 8%, var(--color-surface));
+}
+
+.projection-block--neutral {
+  border-color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-text-muted) 6%, var(--color-surface));
+}
+
+.projection-headline {
+  font-size: 0.875rem;
+  color: var(--color-text);
+  margin: 0 0 0.4rem 0;
+  line-height: 1.45;
+}
+
+.projection-note {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin: 0 0 0.4rem 0;
+  line-height: 1.45;
+}
+
+.projection-assumption {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin: 0;
+  font-style: italic;
+}
+
+.projection-prompt {
+  flex: 0 0 100%;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+  font-style: italic;
+}

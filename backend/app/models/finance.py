@@ -1,7 +1,7 @@
 import enum
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, Enum as SAEnum, Float, ForeignKey, String
+from sqlalchemy import Boolean, Enum as SAEnum, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -64,6 +64,7 @@ class Debt(TimestampMixin, Base):
     student_loan_plan_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("student_loan_plan_configs.id"), nullable=True
     )
+    graduation_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="debts")
