@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Debt, Expense, IncomeSource, PensionPot, SavingsGoal, TaxYearConfig
+from app.models import Asset, Debt, Expense, IncomeSource, PensionPot, SavingsGoal, TaxYearConfig
 from app.routes.auth import get_current_user
 from app.models.user import User
 from app.services.tax_calculator import calculate_take_home_pay
@@ -38,6 +38,7 @@ class FinancialSummaryOut(BaseModel):
     monthly_disposable: float
     total_savings_balance: float
     pension_pot_balance: float
+    total_assets_value: float
     total_debt_balance: float
     net_worth: float
     months_of_runway: float | None
@@ -120,15 +121,23 @@ def get_financial_summary(
 
     # ---- Balance / net worth ----
     all_debts = db.query(Debt).filter_by(user_id=user_id, is_active=True).all()
+    all_assets = db.query(Asset).filter_by(user_id=user_id, is_active=True).all()
 
     total_savings_balance = round(sum(s.current_balance for s in savings_goals), 2)
     pension_pot_balance = round(sum(p.current_balance for p in all_pension_pots), 2)
+    total_assets_value = round(sum(a.current_value for a in all_assets), 2)
     total_debt_balance = round(sum(d.balance for d in all_debts), 2)
-    net_worth = round(total_savings_balance + pension_pot_balance - total_debt_balance, 2)
+    net_worth = round(
+        total_savings_balance + pension_pot_balance + total_assets_value - total_debt_balance, 2
+    )
 
+    # Runway denominator includes mandatory debt payments (credit card, mortgage, etc.)
+    # that persist with no income. monthly_debt_payments already excludes student loans,
+    # which are income-contingent and would stop with no income — reuse it directly.
+    _runway_denom = monthly_expenses + monthly_debt_payments
     months_of_runway = (
-        round(total_savings_balance / monthly_expenses, 1)
-        if monthly_expenses > 0
+        round(total_savings_balance / _runway_denom, 1)
+        if _runway_denom > 0
         else None
     )
 
@@ -151,6 +160,7 @@ def get_financial_summary(
         monthly_disposable=monthly_disposable,
         total_savings_balance=total_savings_balance,
         pension_pot_balance=pension_pot_balance,
+        total_assets_value=total_assets_value,
         total_debt_balance=total_debt_balance,
         net_worth=net_worth,
         months_of_runway=months_of_runway,

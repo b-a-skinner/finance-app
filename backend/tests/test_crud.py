@@ -135,3 +135,11 @@ class TestPensionCRUD(_CRUDBase):
     UPDATE = {"current_balance": 16_000.0}
     UPDATE_FIELD = "current_balance"
     UPDATE_VALUE = 16_000.0
+
+
+class TestAssetCRUD(_CRUDBase):
+    URL = "/api/assets"
+    CREATE = {"name": "Family Home", "asset_type": "property", "current_value": 300_000.0}
+    UPDATE = {"current_value": 320_000.0}
+    UPDATE_FIELD = "current_value"
+    UPDATE_VALUE = 320_000.0

@@ -138,3 +138,28 @@ class PensionOut(BaseModel):
     employee_contribution_pct: float
     employer_contribution_pct: float
     is_active: bool
+
+
+# ---------------------------------------------------------------------------
+# Asset
+# ---------------------------------------------------------------------------
+
+class AssetCreate(BaseModel):
+    name: str
+    asset_type: str
+    current_value: float
+
+
+class AssetUpdate(BaseModel):
+    name: str | None = None
+    asset_type: str | None = None
+    current_value: float | None = None
+
+
+class AssetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    asset_type: str
+    current_value: float
+    is_active: bool

@@ -18,6 +18,12 @@ class PayFrequency(str, enum.Enum):
     annual = "annual"
 
 
+class AssetType(str, enum.Enum):
+    property = "property"
+    vehicle = "vehicle"
+    other = "other"
+
+
 class IncomeSource(TimestampMixin, Base):
     __tablename__ = "income_sources"
 
@@ -50,7 +56,7 @@ class Debt(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    debt_type: Mapped[str] = mapped_column(String(50), nullable=False)  # "student_loan" | "credit_card" | "other"
+    debt_type: Mapped[str] = mapped_column(String(50), nullable=False)  # "student_loan" | "credit_card" | "mortgage" | "other"
     balance: Mapped[float] = mapped_column(Float, nullable=False)
     interest_rate: Mapped[float] = mapped_column(Float, nullable=False)
     min_payment: Mapped[float] = mapped_column(Float, nullable=False)
@@ -89,3 +95,16 @@ class PensionPot(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="pension_pots")
+
+
+class Asset(TimestampMixin, Base):
+    __tablename__ = "assets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    asset_type: Mapped[AssetType] = mapped_column(SAEnum(AssetType), nullable=False)
+    current_value: Mapped[float] = mapped_column(Float, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="assets")

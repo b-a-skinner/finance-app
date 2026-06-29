@@ -13,6 +13,7 @@ const EMPTY = {
 const DEBT_TYPE_LABEL = {
   student_loan: 'Student loan',
   credit_card: 'Credit card',
+  mortgage: 'Mortgage',
   other: 'Other',
 };
 
@@ -128,6 +129,7 @@ export default function Debts() {
                   onChange={e => field('debt_type', e.target.value)}
                 >
                   <option value="credit_card">Credit card</option>
+                  <option value="mortgage">Mortgage</option>
                   <option value="student_loan">Student loan</option>
                   <option value="other">Other</option>
                 </select>

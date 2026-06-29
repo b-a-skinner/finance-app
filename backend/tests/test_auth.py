@@ -115,6 +115,7 @@ class TestNetWorthSummary:
         body = client.get(SUMMARY, headers=_auth_header(client)).json()
         assert body["total_savings_balance"] == 0.0
         assert body["pension_pot_balance"] == 0.0
+        assert body["total_assets_value"] == 0.0
         assert body["total_debt_balance"] == 0.0
         assert body["net_worth"] == 0.0
 
@@ -199,6 +200,57 @@ class TestNetWorthSummary:
         assert body["pension_pot_balance"] == 16000.0
         assert body["net_worth"] == 16000.0
 
+    def test_assets_included_in_net_worth(self, client, db):
+        _seed_tax_config(db)
+        _register(client)
+        headers = _auth_header(client)
+
+        # Property asset: £300,000
+        client.post("/api/assets", json={
+            "name": "Family Home",
+            "asset_type": "property",
+            "current_value": 300_000.0,
+        }, headers=headers)
+
+        # Mortgage debt: £220,000 — behaves like "other" (no student loan plan)
+        client.post("/api/debts", json={
+            "debt_type": "mortgage",
+            "balance": 220_000.0,
+            "interest_rate": 4.5,
+            "min_payment": 1_200.0,
+        }, headers=headers)
+
+        body = client.get(SUMMARY, headers=headers).json()
+        assert body["total_assets_value"] == 300_000.0
+        assert body["total_debt_balance"] == 220_000.0
+        # Net equity from property alone: 300k - 220k = 80k
+        assert body["net_worth"] == 80_000.0
+
+    def test_net_worth_combines_all_balance_types(self, client, db):
+        _seed_tax_config(db)
+        _register(client)
+        headers = _auth_header(client)
+
+        client.post("/api/savings", json={
+            "name": "ISA", "current_balance": 10_000.0,
+            "target_amount": 20_000.0, "monthly_contribution": 0.0,
+        }, headers=headers)
+        client.post("/api/pension", json={
+            "current_balance": 15_000.0,
+            "employee_contribution_pct": 5.0, "employer_contribution_pct": 3.0,
+        }, headers=headers)
+        client.post("/api/assets", json={
+            "name": "Car", "asset_type": "vehicle", "current_value": 8_000.0,
+        }, headers=headers)
+        client.post("/api/debts", json={
+            "debt_type": "credit_card", "balance": 3_000.0,
+            "interest_rate": 22.0, "min_payment": 100.0,
+        }, headers=headers)
+
+        body = client.get(SUMMARY, headers=headers).json()
+        # 10,000 + 15,000 + 8,000 - 3,000 = 30,000
+        assert body["net_worth"] == 30_000.0
+
 
 # ---------------------------------------------------------------------------
 # Finance summary — months of runway
@@ -266,4 +318,56 @@ class TestMonthsOfRunway:
             "category": "Annual bills", "amount": 12000.0, "frequency": "annual", "is_fixed": True,
         }, headers=headers)
         body = client.get(SUMMARY, headers=headers).json()
+        assert body["months_of_runway"] == 6.0
+
+    def test_non_student_loan_debt_reduces_runway(self, client, db):
+        # Credit card min payments persist with no income → must reduce runway
+        _seed_tax_config(db)
+        _register(client)
+        headers = _auth_header(client)
+        client.post("/api/savings", json={
+            "name": "Emergency fund", "current_balance": 6000.0,
+            "target_amount": 10000.0, "monthly_contribution": 0.0,
+        }, headers=headers)
+        client.post("/api/expenses", json={
+            "category": "Rent", "amount": 800.0, "frequency": "monthly", "is_fixed": True,
+        }, headers=headers)
+        client.post("/api/debts", json={
+            "debt_type": "credit_card", "balance": 2000.0,
+            "interest_rate": 22.0, "min_payment": 200.0,
+        }, headers=headers)
+        body = client.get(SUMMARY, headers=headers).json()
+        # £6,000 / (£800 expenses + £200 credit card) = £6,000 / £1,000 = 6.0 months
+        assert body["months_of_runway"] == 6.0
+
+    def test_student_loan_debt_does_not_reduce_runway(self, client, db):
+        # Student loan repayments are income-contingent — they stop with no income,
+        # so they must NOT be included in the runway denominator.
+        _seed_tax_config(db)
+        from app.models.config import StudentLoanPlanConfig
+        db.add(StudentLoanPlanConfig(
+            plan_name="Plan 2", tax_year="2026/27", threshold=29385, repayment_rate_pct=9
+        ))
+        db.commit()
+
+        _register(client)
+        headers = _auth_header(client)
+        plan_id = db.query(StudentLoanPlanConfig).first().id
+
+        client.post("/api/savings", json={
+            "name": "Emergency fund", "current_balance": 6000.0,
+            "target_amount": 10000.0, "monthly_contribution": 0.0,
+        }, headers=headers)
+        client.post("/api/expenses", json={
+            "category": "Rent", "amount": 1000.0, "frequency": "monthly", "is_fixed": True,
+        }, headers=headers)
+        client.post("/api/debts", json={
+            "debt_type": "student_loan",
+            "balance": 40000.0,
+            "interest_rate": 7.3,
+            "min_payment": 0.0,
+            "student_loan_plan_id": plan_id,
+        }, headers=headers)
+        body = client.get(SUMMARY, headers=headers).json()
+        # Student loan doesn't affect runway denominator → still £6,000 / £1,000 = 6.0 months
         assert body["months_of_runway"] == 6.0

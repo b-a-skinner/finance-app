@@ -42,7 +42,7 @@ export default function Dashboard() {
   const {
     take_home: t,
     monthly_disposable, monthly_expenses, monthly_debt_payments, monthly_savings_contributions,
-    total_savings_balance, pension_pot_balance, total_debt_balance, net_worth,
+    total_savings_balance, pension_pot_balance, total_assets_value, total_debt_balance, net_worth,
     months_of_runway,
   } = summary;
   const hasIncome = t.gross_annual > 0;
@@ -113,6 +113,10 @@ export default function Dashboard() {
                     <tr>
                       <td>Pension pot</td>
                       <td>{gbp(pension_pot_balance)}</td>
+                    </tr>
+                    <tr>
+                      <td>Assets</td>
+                      <td>{gbp(total_assets_value)}</td>
                     </tr>
                     <tr className="row-muted">
                       <td>Total debt</td>
@@ -232,7 +236,10 @@ export default function Dashboard() {
                   </span>
                   <span className="runway-sub">of expenses covered by savings</span>
                 </div>
-                <p className="runway-supporting">based on {gbp(monthly_expenses)}/month in expenses</p>
+                <p className="runway-supporting">
+                  based on {gbp(monthly_expenses + monthly_debt_payments)}/month in expenses
+                  {monthly_debt_payments > 0 && ` (includes ${gbp(monthly_debt_payments)} debt payments)`}
+                </p>
                 <p className="runway-context">{runwayContext(months_of_runway)}</p>
               </div>
             )}
