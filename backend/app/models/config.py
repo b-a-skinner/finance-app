@@ -76,3 +76,18 @@ class AgeBenchmarkPension(Base):
     median_pension_pot: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     source: Mapped[str] = mapped_column(String(255), nullable=False)
     source_metric: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
+class RegionalSalaryBenchmark(Base):
+    """UK median annual salary by region (ONS ASHE).
+    Includes a 'UK overall' row used as fallback when region is unrecognised.
+    region_name values must match those returned by get_region_from_postcode().
+    """
+
+    __tablename__ = "regional_salary_benchmark"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    region_name: Mapped[str] = mapped_column(String(100), nullable=False)  # e.g. "London", "UK overall"
+    median_annual_salary: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_notes: Mapped[str] = mapped_column(String(255), nullable=False)

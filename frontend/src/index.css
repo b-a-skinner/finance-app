@@ -817,3 +817,7 @@ body {
   color: var(--color-text-muted);
   margin: 0;
 }
+
+.benchmark-caveat {
+  font-style: italic;
+}

@@ -222,8 +222,9 @@ class ProfileOut(BaseModel):
 class AgeComparisonOut(BaseModel):
     user_age: int | None
     current_monthly_salary: float
+    current_annual_salary: float
     current_pension_pot: float
-    # Salary
+    # Age-based salary
     salary_band_label: str | None
     median_monthly_salary: float | None
     salary_comparison_pct: float | None
@@ -236,3 +237,10 @@ class AgeComparisonOut(BaseModel):
     pension_data_available: bool
     pension_source: str | None
     pension_source_metric: str | None
+    # Regional salary
+    region: str | None
+    median_annual_salary_for_region: float | None
+    salary_vs_region_pct: float | None
+    region_source: str | None
+    region_source_notes: str | None
+    is_london: bool

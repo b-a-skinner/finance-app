@@ -24,18 +24,7 @@ function BenchmarkRow({ label, children }) {
   );
 }
 
-function HowYouCompare({ cmp, dobSet }) {
-  if (!dobSet) {
-    return (
-      <div className="card benchmark-card">
-        <p className="card-title">How you compare</p>
-        <p className="benchmark-prompt">
-          Add your date of birth above to see how your salary and pension compare to UK medians for your age group.
-        </p>
-      </div>
-    );
-  }
-
+function HowYouCompare({ cmp, dobSet, postcodeSet }) {
   if (!cmp) {
     return (
       <div className="card benchmark-card">
@@ -52,14 +41,26 @@ function HowYouCompare({ cmp, dobSet }) {
     pension_band_label, median_pension_pot, pension_comparison_pct, pension_data_available,
     pension_source, pension_source_metric,
     current_pension_pot,
+    region, median_annual_salary_for_region, salary_vs_region_pct,
+    region_source, region_source_notes, is_london,
+    current_annual_salary,
   } = cmp;
+
+  const regionLabel = region ?? 'the UK overall';
 
   return (
     <div className="card benchmark-card">
-      <p className="card-title">How you compare — age {user_age}</p>
+      <p className="card-title">
+        How you compare{user_age != null ? ` — age ${user_age}` : ''}
+      </p>
 
+      {/* Age-based monthly salary */}
       <BenchmarkRow label="Monthly salary">
-        {salary_band_label ? (
+        {!dobSet ? (
+          <p className="benchmark-prompt">
+            Add your date of birth above to see how your salary compares by age group.
+          </p>
+        ) : salary_band_label ? (
           <>
             <p className="benchmark-text">
               Your gross monthly salary of <strong>{gbp(current_monthly_salary)}</strong> is{' '}
@@ -76,8 +77,13 @@ function HowYouCompare({ cmp, dobSet }) {
         )}
       </BenchmarkRow>
 
+      {/* Pension pot */}
       <BenchmarkRow label="Pension pot">
-        {pension_band_label && pension_data_available ? (
+        {!dobSet ? (
+          <p className="benchmark-prompt">
+            Add your date of birth above to see how your pension compares by age group.
+          </p>
+        ) : pension_band_label && pension_data_available ? (
           <>
             <p className="benchmark-text">
               Your pension pot of <strong>{gbp(current_pension_pot)}</strong> is{' '}
@@ -97,6 +103,34 @@ function HowYouCompare({ cmp, dobSet }) {
           </p>
         )}
       </BenchmarkRow>
+
+      {/* Regional annual salary */}
+      <BenchmarkRow label="Regional salary">
+        {!postcodeSet ? (
+          <p className="benchmark-prompt">
+            Add your postcode to see how your salary compares regionally.
+          </p>
+        ) : median_annual_salary_for_region != null ? (
+          <>
+            <p className="benchmark-text">
+              Your gross annual salary of <strong>{gbp(current_annual_salary)}</strong> is{' '}
+              <strong>{comparisonWord(salary_vs_region_pct)}</strong> the median of{' '}
+              <strong>{gbp(median_annual_salary_for_region)}</strong> for {regionLabel}
+              {salary_vs_region_pct !== null && ` (${salary_vs_region_pct}% of median)`}.
+            </p>
+            <p className="benchmark-source">{region_source} · all employees</p>
+            {is_london && (
+              <p className="benchmark-source benchmark-caveat">
+                London figure is full-time employees only, so may overstate the typical comparison.
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="benchmark-text benchmark-unavailable">
+            No regional salary benchmark data available.
+          </p>
+        )}
+      </BenchmarkRow>
     </div>
   );
 }
@@ -107,6 +141,7 @@ export default function Profile() {
   const [region, setRegion] = useState(null);
   const [regionKnown, setRegionKnown] = useState(false);
   const [dobSet, setDobSet] = useState(false);
+  const [postcodeSet, setPostcodeSet] = useState(false);
   const [comparison, setComparison] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -125,7 +160,6 @@ export default function Profile() {
     apiFetch('/api/profile')
       .then(r => r.json())
       .then(data => {
-        const hasDob = !!data.date_of_birth;
         setForm({
           date_of_birth: data.date_of_birth ?? '',
           occupation: data.occupation ?? '',
@@ -133,8 +167,9 @@ export default function Profile() {
         });
         setRegion(data.region);
         setRegionKnown(data.postcode_outward != null && data.postcode_outward !== '');
-        setDobSet(hasDob);
-        if (hasDob) loadComparison();
+        setDobSet(!!data.date_of_birth);
+        setPostcodeSet(!!data.postcode_outward);
+        loadComparison();
       })
       .catch(() => setError('Failed to load profile.'))
       .finally(() => setLoading(false));
@@ -178,11 +213,10 @@ export default function Profile() {
       const data = await res.json();
       setRegion(data.region);
       setRegionKnown(!!data.postcode_outward);
-      const hasDob = !!data.date_of_birth;
-      setDobSet(hasDob);
+      setDobSet(!!data.date_of_birth);
+      setPostcodeSet(!!data.postcode_outward);
       setSaved(true);
-      if (hasDob) loadComparison();
-      else setComparison(null);
+      loadComparison();
     } catch {
       setFormError('Network error — please try again.');
     } finally {
@@ -267,7 +301,7 @@ export default function Profile() {
         </div>
 
         <div className="resource-layout resource-layout--single" style={{ marginTop: '1.5rem' }}>
-          <HowYouCompare cmp={comparison} dobSet={dobSet} />
+          <HowYouCompare cmp={comparison} dobSet={dobSet} postcodeSet={postcodeSet} />
         </div>
       </main>
     </>

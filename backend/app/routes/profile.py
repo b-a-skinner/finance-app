@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, IncomeSource, PensionPot
+from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, IncomeSource, PensionPot, RegionalSalaryBenchmark
 from app.models.user import User
 from app.routes.auth import get_current_user
 from app.schemas import AgeComparisonOut, ProfileOut, ProfileUpdate
-from app.services.age_benchmark import get_age_comparison
+from app.services.age_benchmark import get_age_comparison, get_regional_comparison
 from app.services.postcode_lookup import get_region_from_postcode
 
 router = APIRouter(prefix="/profile", tags=["profile"])
@@ -48,26 +48,34 @@ def get_profile_comparison(
 ):
     salary_benchmarks = db.query(AgeBenchmarkSalary).order_by(AgeBenchmarkSalary.min_age).all()
     pension_benchmarks = db.query(AgeBenchmarkPension).order_by(AgeBenchmarkPension.min_age).all()
+    regional_benchmarks = db.query(RegionalSalaryBenchmark).all()
 
-    monthly_salary = sum(
-        s.gross_annual_salary / 12
-        for s in db.query(IncomeSource).filter_by(user_id=current_user.id, is_active=True).all()
-    )
+    income_sources = db.query(IncomeSource).filter_by(user_id=current_user.id, is_active=True).all()
+    annual_salary = sum(s.gross_annual_salary for s in income_sources)
+    monthly_salary = annual_salary / 12
+
     pension_pot = sum(
         p.current_balance
         for p in db.query(PensionPot).filter_by(user_id=current_user.id, is_active=True).all()
     )
 
-    result = get_age_comparison(
+    age_result = get_age_comparison(
         date_of_birth=current_user.date_of_birth,
         current_monthly_salary=monthly_salary,
         current_pension_pot=pension_pot,
         salary_benchmarks=salary_benchmarks,
         pension_benchmarks=pension_benchmarks,
     )
+    regional_result = get_regional_comparison(
+        postcode_outward=current_user.postcode_outward,
+        current_annual_salary=annual_salary,
+        regional_benchmarks=regional_benchmarks,
+    )
 
     return AgeComparisonOut(
-        **dataclasses.asdict(result),
+        **dataclasses.asdict(age_result),
+        **dataclasses.asdict(regional_result),
         current_monthly_salary=monthly_salary,
+        current_annual_salary=annual_salary,
         current_pension_pot=pension_pot,
     )

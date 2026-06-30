@@ -4,7 +4,7 @@ Run once after `alembic upgrade head`:
     python seed.py        (from backend/ with .venv active)
 """
 from app.database import SessionLocal
-from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, StudentLoanPlanConfig, TaxYearConfig
+from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, RegionalSalaryBenchmark, StudentLoanPlanConfig, TaxYearConfig
 
 
 def seed() -> None:
@@ -69,6 +69,27 @@ def seed() -> None:
             ])
             db.commit()
             print("Seeded age benchmark tables.")
+
+        if not db.query(RegionalSalaryBenchmark).first():
+            _R = "ONS ASHE, April 2025, released October 2025"
+            _RN = "all employees except London which is full-time only — see note"
+            db.add_all([
+                RegionalSalaryBenchmark(region_name="London",                   median_annual_salary=49692, source=_R, source_notes=_RN),
+                RegionalSalaryBenchmark(region_name="South East",               median_annual_salary=35215, source=_R, source_notes=_RN),
+                RegionalSalaryBenchmark(region_name="East of England",          median_annual_salary=34104, source=_R, source_notes=_RN),
+                RegionalSalaryBenchmark(region_name="Scotland",                 median_annual_salary=33061, source=_R, source_notes=_RN),
+                RegionalSalaryBenchmark(region_name="South West",               median_annual_salary=31432, source=_R, source_notes=_RN),
+                RegionalSalaryBenchmark(region_name="West Midlands",            median_annual_salary=31345, source=_R, source_notes=_RN),
+                RegionalSalaryBenchmark(region_name="North West",               median_annual_salary=31330, source=_R, source_notes=_RN),
+                RegionalSalaryBenchmark(region_name="Northern Ireland",         median_annual_salary=31232, source=_R, source_notes=_RN),
+                RegionalSalaryBenchmark(region_name="Wales",                    median_annual_salary=30732, source=_R, source_notes=_RN),
+                RegionalSalaryBenchmark(region_name="East Midlands",            median_annual_salary=30690, source=_R, source_notes=_RN),
+                RegionalSalaryBenchmark(region_name="Yorkshire and the Humber", median_annual_salary=30682, source=_R, source_notes=_RN),
+                RegionalSalaryBenchmark(region_name="North East",               median_annual_salary=29584, source=_R, source_notes=_RN),
+                RegionalSalaryBenchmark(region_name="UK overall",               median_annual_salary=32890, source=_R, source_notes=_RN),
+            ])
+            db.commit()
+            print("Seeded regional salary benchmark table.")
     finally:
         db.close()
 

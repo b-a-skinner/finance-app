@@ -1,11 +1,13 @@
 """
-Age-based benchmark comparison service.
-Pure function — no database access. Accepts pre-fetched benchmark rows so
-it can be unit-tested with plain SimpleNamespace objects.
+Age-based and regional salary benchmark comparison service.
+Pure functions — no database access. Accept pre-fetched benchmark rows so
+they can be unit-tested with plain SimpleNamespace objects.
 """
 from dataclasses import dataclass
 from datetime import date
 from typing import Protocol
+
+from app.services.postcode_lookup import get_region_from_postcode
 
 
 class SalaryBand(Protocol):
@@ -43,6 +45,27 @@ class AgeComparisonResult:
     pension_source: str | None
     pension_source_metric: str | None
 
+
+# ── Regional benchmark types ─────────────────────────────────────────────────
+
+class RegionalBenchmark(Protocol):
+    region_name: str
+    median_annual_salary: float
+    source: str
+    source_notes: str
+
+
+@dataclass
+class RegionalComparisonResult:
+    region: str | None                         # matched region name, or None
+    median_annual_salary_for_region: float | None
+    salary_vs_region_pct: float | None
+    region_source: str | None
+    region_source_notes: str | None
+    is_london: bool                            # drives the London caveat note
+
+
+# ── Age calculation helpers ───────────────────────────────────────────────────
 
 def _calculate_age(dob: date) -> int:
     today = date.today()
@@ -122,4 +145,56 @@ def get_age_comparison(
         pension_data_available=pen_available,
         pension_source=pension_band.source if pension_band else None,
         pension_source_metric=pension_band.source_metric if pension_band else None,
+    )
+
+
+def get_regional_comparison(
+    postcode_outward: str | None,
+    current_annual_salary: float,
+    regional_benchmarks,   # iterable of RegionalBenchmark-like objects
+) -> RegionalComparisonResult:
+    """
+    Compare a user's annual salary against the ONS regional median.
+
+    When postcode_outward is None, returns all nulls — the caller should
+    prompt the user to add a postcode rather than showing the comparison.
+    When the postcode is set but unrecognised, falls back to the 'UK overall'
+    row so the user still gets a meaningful comparison.
+    """
+    if postcode_outward is None:
+        return RegionalComparisonResult(
+            region=None, median_annual_salary_for_region=None,
+            salary_vs_region_pct=None, region_source=None,
+            region_source_notes=None, is_london=False,
+        )
+
+    region = get_region_from_postcode(postcode_outward)
+
+    matched: RegionalBenchmark | None = None
+    fallback: RegionalBenchmark | None = None
+    for b in regional_benchmarks:
+        if b.region_name == "UK overall":
+            fallback = b
+        if region and b.region_name == region:
+            matched = b
+
+    benchmark = matched or fallback
+
+    if benchmark is None:
+        return RegionalComparisonResult(
+            region=region, median_annual_salary_for_region=None,
+            salary_vs_region_pct=None, region_source=None,
+            region_source_notes=None, is_london=region == "London",
+        )
+
+    median = benchmark.median_annual_salary
+    pct = round(current_annual_salary / median * 100, 1) if median > 0 else None
+
+    return RegionalComparisonResult(
+        region=region,
+        median_annual_salary_for_region=median,
+        salary_vs_region_pct=pct,
+        region_source=benchmark.source,
+        region_source_notes=benchmark.source_notes,
+        is_london=region == "London",
     )

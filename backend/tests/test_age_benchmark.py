@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.age_benchmark import AgeComparisonResult, _calculate_age, get_age_comparison
+from app.services.age_benchmark import AgeComparisonResult, _calculate_age, get_age_comparison, get_regional_comparison
 
 # ---------------------------------------------------------------------------
 # Shared fixtures — mirrors the seeded benchmark data
@@ -320,3 +320,182 @@ class TestComparisonEndpoint:
     def test_requires_auth(self, client, db):
         resp = client.get("/api/profile/comparison")
         assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Regional comparison — pure unit tests
+# ---------------------------------------------------------------------------
+
+REG_SOURCE = "ONS ASHE, April 2025, released October 2025"
+REG_NOTES = "all employees except London which is full-time only — see note"
+
+
+def _reg(region_name, median):
+    return SimpleNamespace(
+        region_name=region_name,
+        median_annual_salary=median,
+        source=REG_SOURCE,
+        source_notes=REG_NOTES,
+    )
+
+
+@pytest.fixture
+def regional_bands():
+    return [
+        _reg("London",                   49692),
+        _reg("South East",               35215),
+        _reg("East of England",          34104),
+        _reg("Scotland",                 33061),
+        _reg("South West",               31432),
+        _reg("West Midlands",            31345),
+        _reg("North West",               31330),
+        _reg("Northern Ireland",         31232),
+        _reg("Wales",                    30732),
+        _reg("East Midlands",            30690),
+        _reg("Yorkshire and the Humber", 30682),
+        _reg("North East",               29584),
+        _reg("UK overall",               32890),
+    ]
+
+
+class TestGetRegionalComparison:
+    def test_no_postcode_returns_all_nulls(self, regional_bands):
+        result = get_regional_comparison(None, 35000, regional_bands)
+        assert result.region is None
+        assert result.median_annual_salary_for_region is None
+        assert result.salary_vs_region_pct is None
+        assert result.is_london is False
+
+    def test_london_postcode_matches_london(self, regional_bands):
+        # SW1A → London
+        result = get_regional_comparison("SW1A", 50000, regional_bands)
+        assert result.region == "London"
+        assert result.median_annual_salary_for_region == 49692
+        assert result.is_london is True
+
+    def test_non_london_postcode_not_flagged(self, regional_bands):
+        # M1 → North West
+        result = get_regional_comparison("M1", 30000, regional_bands)
+        assert result.region == "North West"
+        assert result.is_london is False
+
+    def test_correct_region_matched_for_known_postcodes(self, regional_bands):
+        cases = [
+            ("EH1",  "Scotland"),
+            ("CF10", "Wales"),
+            ("BT1",  "Northern Ireland"),
+            ("LS1",  "Yorkshire and the Humber"),
+            ("NG1",  "East Midlands"),
+            ("B1",   "West Midlands"),
+            ("NE1",  "North East"),
+        ]
+        for postcode, expected_region in cases:
+            result = get_regional_comparison(postcode, 30000, regional_bands)
+            assert result.region == expected_region, f"{postcode} → expected {expected_region}, got {result.region}"
+
+    def test_unrecognised_postcode_falls_back_to_uk_overall(self, regional_bands):
+        # "ZZ9" is not a real postcode area
+        result = get_regional_comparison("ZZ9", 30000, regional_bands)
+        assert result.region is None
+        assert result.median_annual_salary_for_region == 32890
+
+    def test_percentage_above_median(self, regional_bands):
+        # North West median 31330; salary 62660 = exactly 200%
+        result = get_regional_comparison("M1", 62660, regional_bands)
+        assert result.salary_vs_region_pct == 200.0
+
+    def test_percentage_at_median(self, regional_bands):
+        result = get_regional_comparison("M1", 31330, regional_bands)
+        assert result.salary_vs_region_pct == 100.0
+
+    def test_percentage_below_median(self, regional_bands):
+        result = get_regional_comparison("M1", 15665, regional_bands)
+        assert result.salary_vs_region_pct == 50.0
+
+    def test_percentage_rounds_to_one_decimal(self, regional_bands):
+        # 30000 / 35215 * 100 = 85.19... → 85.2
+        result = get_regional_comparison("RH1", 30000, regional_bands)
+        assert result.salary_vs_region_pct == 85.2
+
+    def test_source_fields_populated(self, regional_bands):
+        result = get_regional_comparison("EH1", 35000, regional_bands)
+        assert result.region_source == REG_SOURCE
+        assert result.region_source_notes == REG_NOTES
+
+    def test_london_is_london_flag(self, regional_bands):
+        london = get_regional_comparison("EC1A", 40000, regional_bands)
+        not_london = get_regional_comparison("EH1", 40000, regional_bands)
+        assert london.is_london is True
+        assert not_london.is_london is False
+
+
+# ---------------------------------------------------------------------------
+# Integration test — /comparison endpoint includes regional fields
+# ---------------------------------------------------------------------------
+
+def _seed_regional_benchmarks(db):
+    from app.models import RegionalSalaryBenchmark
+    _r = "ONS ASHE, April 2025, released October 2025"
+    _rn = "all employees except London which is full-time only — see note"
+    db.add_all([
+        RegionalSalaryBenchmark(region_name="London",                   median_annual_salary=49692, source=_r, source_notes=_rn),
+        RegionalSalaryBenchmark(region_name="South East",               median_annual_salary=35215, source=_r, source_notes=_rn),
+        RegionalSalaryBenchmark(region_name="Scotland",                 median_annual_salary=33061, source=_r, source_notes=_rn),
+        RegionalSalaryBenchmark(region_name="North West",               median_annual_salary=31330, source=_r, source_notes=_rn),
+        RegionalSalaryBenchmark(region_name="UK overall",               median_annual_salary=32890, source=_r, source_notes=_rn),
+    ])
+    db.commit()
+
+
+class TestComparisonEndpointRegional:
+    def test_postcode_set_returns_regional_data(self, client, db):
+        _seed_benchmarks(db)
+        _seed_regional_benchmarks(db)
+        client.post(REGISTER, json=_ALICE)
+        headers = _auth_header(client)
+
+        client.put("/api/profile", json={
+            "date_of_birth": "1990-01-01",
+            "postcode_outward": "M1",
+        }, headers=headers)
+        client.post("/api/income", json={
+            "label": "Job", "gross_annual_salary": 31330.0, "pay_frequency": "monthly",
+        }, headers=headers)
+
+        body = client.get("/api/profile/comparison", headers=headers).json()
+        assert body["region"] == "North West"
+        assert body["median_annual_salary_for_region"] == 31330.0
+        assert body["salary_vs_region_pct"] == 100.0
+        assert body["is_london"] is False
+        assert body["current_annual_salary"] == 31330.0
+
+    def test_no_postcode_returns_null_regional_fields(self, client, db):
+        _seed_benchmarks(db)
+        _seed_regional_benchmarks(db)
+        client.post(REGISTER, json=_ALICE)
+        body = client.get("/api/profile/comparison", headers=_auth_header(client)).json()
+        assert body["region"] is None
+        assert body["median_annual_salary_for_region"] is None
+        assert body["salary_vs_region_pct"] is None
+        assert body["is_london"] is False
+
+    def test_london_postcode_sets_is_london(self, client, db):
+        _seed_benchmarks(db)
+        _seed_regional_benchmarks(db)
+        client.post(REGISTER, json=_ALICE)
+        headers = _auth_header(client)
+        client.put("/api/profile", json={"postcode_outward": "EC1A"}, headers=headers)
+        body = client.get("/api/profile/comparison", headers=headers).json()
+        assert body["region"] == "London"
+        assert body["is_london"] is True
+
+    def test_unrecognised_postcode_uses_uk_overall(self, client, db):
+        _seed_benchmarks(db)
+        _seed_regional_benchmarks(db)
+        client.post(REGISTER, json=_ALICE)
+        headers = _auth_header(client)
+        # Store a valid-format but unmapped outward code
+        client.put("/api/profile", json={"postcode_outward": "ZZ9"}, headers=headers)
+        body = client.get("/api/profile/comparison", headers=headers).json()
+        assert body["region"] is None
+        assert body["median_annual_salary_for_region"] == 32890.0
