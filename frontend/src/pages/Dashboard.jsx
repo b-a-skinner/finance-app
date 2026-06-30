@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import NavBar from '../components/NavBar';
+import InfoTip from '../components/InfoTip';
 import { useAuth } from '../context/AuthContext';
 
 const gbp = n =>
@@ -160,7 +161,7 @@ export default function Dashboard() {
               {/* ── Net Worth ── */}
               <div className="card net-worth-card">
                 <p className="card-title">
-                  Net Worth
+                  <span className="label-with-tip">Net Worth<InfoTip text="Everything you own (savings, pension, property, vehicles) minus everything you owe (debts). A snapshot of your overall financial position." /></span>
                   <ChangeIndicator metric={period?.net_worth} />
                 </p>
                 <p className={`net-worth-amount ${net_worth >= 0 ? 'nw-positive' : 'nw-negative'}`}>
@@ -212,7 +213,7 @@ export default function Dashboard() {
                 <table className="breakdown">
                   <tbody>
                     <tr>
-                      <td>Gross annual salary</td>
+                      <td>Gross annual <span className="label-with-tip">salary<InfoTip text="Your total salary before any tax, National Insurance, or other deductions are taken off." /></span></td>
                       <td>{gbp(t.gross_annual)}</td>
                     </tr>
                     <tr className="row-muted">
@@ -220,7 +221,7 @@ export default function Dashboard() {
                       <td>−{gbp(t.income_tax)}</td>
                     </tr>
                     <tr className="row-muted">
-                      <td>National Insurance</td>
+                      <td><span className="label-with-tip">National Insurance<InfoTip text="A tax on your earnings that funds the NHS, state pension, and other benefits. Taken directly from your pay before you receive it." /></span></td>
                       <td>−{gbp(t.national_insurance)}</td>
                     </tr>
                     {t.student_loan > 0 && (
@@ -231,12 +232,12 @@ export default function Dashboard() {
                     )}
                     {t.pension_employee > 0 && (
                       <tr className="row-muted">
-                        <td>Pension (employee)</td>
+                        <td><span className="label-with-tip">Pension (employee)<InfoTip text="The amount deducted from your salary each month and paid into your pension pot. Your employer usually adds on top of this separately." /></span></td>
                         <td>−{gbp(t.pension_employee)}</td>
                       </tr>
                     )}
                     <tr className="row-total">
-                      <td>Net monthly income</td>
+                      <td>Net monthly <span className="label-with-tip">income<InfoTip text="What actually lands in your bank account each month after all deductions have been taken off." /></span></td>
                       <td>{gbp(t.net_monthly)}</td>
                     </tr>
                   </tbody>
@@ -254,7 +255,7 @@ export default function Dashboard() {
                 <table className="breakdown">
                   <tbody>
                     <tr>
-                      <td>Net monthly income</td>
+                      <td>Net monthly <span className="label-with-tip">income<InfoTip text="What actually lands in your bank account each month after all deductions have been taken off." /></span></td>
                       <td>{gbp(t.net_monthly)}</td>
                     </tr>
                     {monthly_expenses > 0 && (
@@ -296,14 +297,14 @@ export default function Dashboard() {
             {/* ── Emergency fund runway ── */}
             {months_of_runway === null ? (
               <div className="card runway-card runway-card--null">
-                <p className="card-title">Emergency Fund Coverage</p>
+                <p className="card-title"><span className="label-with-tip">Emergency Fund Coverage<InfoTip text="How many months you could cover your essential expenses using your current savings if your income stopped. 3–6 months is generally considered a healthy buffer." /></span></p>
                 <p className="runway-prompt">
                   Add your <Link to="/expenses" className="runway-link">monthly expenses</Link> to see how long your savings would last.
                 </p>
               </div>
             ) : (
               <div className={`card runway-card ${runwayTier(months_of_runway)}`}>
-                <p className="card-title">Emergency Fund Coverage</p>
+                <p className="card-title"><span className="label-with-tip">Emergency Fund Coverage<InfoTip text="How many months you could cover your essential expenses using your current savings if your income stopped. 3–6 months is generally considered a healthy buffer." /></span></p>
                 <div className="runway-header">
                   <span className={`runway-months ${runwayTier(months_of_runway)}`}>
                     {formatRunway(months_of_runway)}

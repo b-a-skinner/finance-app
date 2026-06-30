@@ -848,3 +848,75 @@ body {
   font-size: 0.75rem;
   color: var(--color-text-muted);
 }
+
+/* ── Info tooltips ─────────────────────────────────────────────────────────── */
+
+.label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  cursor: default;
+}
+
+.info-tip-icon {
+  font-size: 0.9em;
+  color: var(--color-text-muted);
+  opacity: 0.55;
+  user-select: none;
+  line-height: 1;
+}
+
+.info-tip:hover .info-tip-icon,
+.info-tip:focus-within .info-tip-icon {
+  opacity: 1;
+}
+
+.info-tip-bubble {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 220px;
+  background: #374151;
+  color: #f9fafb;
+  font-size: 0.74rem;
+  font-weight: 400;
+  line-height: 1.45;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  z-index: 200;
+  pointer-events: none;
+  white-space: normal;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.info-tip:hover .info-tip-bubble,
+.info-tip:focus-within .info-tip-bubble {
+  display: block;
+}
+
+/* ── Projection gov.uk link ────────────────────────────────────────────────── */
+
+.projection-link {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.projection-link a {
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.projection-link a:hover {
+  text-decoration: underline;
+}

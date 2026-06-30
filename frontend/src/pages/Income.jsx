@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import NavBar from '../components/NavBar';
+import InfoTip from '../components/InfoTip';
 import { useResource } from '../hooks/useResource';
 
 const EMPTY = { label: '', gross_annual_salary: '', pay_frequency: 'annual' };
@@ -93,7 +94,7 @@ export default function Income() {
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="inc-salary">Gross annual salary (£)</label>
+                <label htmlFor="inc-salary"><span className="label-with-tip">Gross annual salary (£)<InfoTip text="Your total salary before any tax, National Insurance, or other deductions are taken off." /></span></label>
                 <input
                   id="inc-salary"
                   type="number"
