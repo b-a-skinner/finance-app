@@ -1,7 +1,8 @@
 import enum
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, Enum as SAEnum, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -109,3 +110,20 @@ class Asset(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="assets")
+
+
+class FinancialSnapshot(TimestampMixin, Base):
+    """Point-in-time record of a user's key financial metrics. Captured lazily — no scheduler needed."""
+
+    __tablename__ = "financial_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+    net_worth: Mapped[float] = mapped_column(Float, nullable=False)
+    monthly_disposable_income: Mapped[float] = mapped_column(Float, nullable=False)
+    total_savings_balance: Mapped[float] = mapped_column(Float, nullable=False)
+    total_debt_balance: Mapped[float] = mapped_column(Float, nullable=False)
+    pension_pot_balance: Mapped[float] = mapped_column(Float, nullable=False)
+    months_of_runway: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

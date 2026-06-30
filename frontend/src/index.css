@@ -821,3 +821,30 @@ body {
 .benchmark-caveat {
   font-style: italic;
 }
+
+/* ── Change indicators ─────────────────────────────────────────────────────── */
+
+.change-indicator {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.change-indicator--warn {
+  color: #d97706;
+}
+
+.change-indicator-period {
+  opacity: 0.75;
+}
+
+.change-period-label {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}

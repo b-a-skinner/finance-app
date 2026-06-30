@@ -1,3 +1,5 @@
+import dataclasses
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -6,11 +8,11 @@ from app.database import get_db
 from app.models import Asset, Debt, Expense, IncomeSource, PensionPot, SavingsGoal, TaxYearConfig
 from app.routes.auth import get_current_user
 from app.models.user import User
+from app.services.finance_summary import CURRENT_TAX_YEAR
+from app.services.snapshot_service import get_financial_changes, maybe_capture_snapshot
 from app.services.tax_calculator import calculate_take_home_pay
 
 router = APIRouter(prefix="/finance", tags=["finance"])
-
-CURRENT_TAX_YEAR = "2026/27"
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +46,31 @@ class FinancialSummaryOut(BaseModel):
     months_of_runway: float | None
 
 
+class MetricChangeOut(BaseModel):
+    current_value: float
+    previous_value: float
+    absolute_change: float
+    direction: str          # "up" | "down" | "unchanged"
+    elapsed_days: int
+
+
+class ComparisonPeriodOut(BaseModel):
+    label: str
+    elapsed_days: int
+    data_caveat: str | None
+    net_worth: MetricChangeOut
+    monthly_disposable_income: MetricChangeOut
+    total_savings_balance: MetricChangeOut
+    total_debt_balance: MetricChangeOut
+    pension_pot_balance: MetricChangeOut
+    months_of_runway: MetricChangeOut | None
+
+
+class FinancialChangesOut(BaseModel):
+    weekly: ComparisonPeriodOut | None
+    monthly: ComparisonPeriodOut | None
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -66,6 +93,8 @@ def get_financial_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    maybe_capture_snapshot(current_user.id, db)
+
     user_id = current_user.id
 
     tax_config = db.query(TaxYearConfig).filter_by(tax_year=CURRENT_TAX_YEAR).first()
@@ -165,3 +194,32 @@ def get_financial_summary(
         net_worth=net_worth,
         months_of_runway=months_of_runway,
     )
+
+
+@router.get("/changes", response_model=FinancialChangesOut)
+def get_financial_changes_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    maybe_capture_snapshot(current_user.id, db)
+    result = get_financial_changes(current_user.id, db)
+
+    def _period(p):
+        if p is None:
+            return None
+        return ComparisonPeriodOut(
+            label=p.label,
+            elapsed_days=p.elapsed_days,
+            data_caveat=p.data_caveat,
+            net_worth=MetricChangeOut(**dataclasses.asdict(p.net_worth)),
+            monthly_disposable_income=MetricChangeOut(**dataclasses.asdict(p.monthly_disposable_income)),
+            total_savings_balance=MetricChangeOut(**dataclasses.asdict(p.total_savings_balance)),
+            total_debt_balance=MetricChangeOut(**dataclasses.asdict(p.total_debt_balance)),
+            pension_pot_balance=MetricChangeOut(**dataclasses.asdict(p.pension_pot_balance)),
+            months_of_runway=(
+                MetricChangeOut(**dataclasses.asdict(p.months_of_runway))
+                if p.months_of_runway is not None else None
+            ),
+        )
+
+    return FinancialChangesOut(weekly=_period(result.weekly), monthly=_period(result.monthly))

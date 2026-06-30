@@ -15,6 +15,13 @@ function comparisonWord(pct) {
   return 'about the same as';
 }
 
+function gapPct(pct) {
+  if (pct === null || pct === undefined) return null;
+  const gap = Math.abs(pct - 100).toFixed(1);
+  const dir = pct >= 100 ? 'above' : 'below';
+  return `${gap}% ${dir} median`;
+}
+
 function BenchmarkRow({ label, children }) {
   return (
     <div className="benchmark-row">
@@ -66,40 +73,13 @@ function HowYouCompare({ cmp, dobSet, postcodeSet }) {
               Your gross monthly salary of <strong>{gbp(current_monthly_salary)}</strong> is{' '}
               <strong>{comparisonWord(salary_comparison_pct)}</strong> the UK median of{' '}
               <strong>{gbp(median_monthly_salary)}</strong> for the {salary_band_label} age group
-              {salary_comparison_pct !== null && ` (${salary_comparison_pct}% of median)`}.
+              {salary_comparison_pct !== null && ` (${gapPct(salary_comparison_pct)})`}.
             </p>
             <p className="benchmark-source">{salary_source} · {salary_source_metric}</p>
           </>
         ) : (
           <p className="benchmark-text benchmark-unavailable">
             No salary benchmark data available for your age group.
-          </p>
-        )}
-      </BenchmarkRow>
-
-      {/* Pension pot */}
-      <BenchmarkRow label="Pension pot">
-        {!dobSet ? (
-          <p className="benchmark-prompt">
-            Add your date of birth above to see how your pension compares by age group.
-          </p>
-        ) : pension_band_label && pension_data_available ? (
-          <>
-            <p className="benchmark-text">
-              Your pension pot of <strong>{gbp(current_pension_pot)}</strong> is{' '}
-              <strong>{comparisonWord(pension_comparison_pct)}</strong> the UK median of{' '}
-              <strong>{gbp(median_pension_pot)}</strong> for the {pension_band_label} age group
-              {pension_comparison_pct !== null && ` (${pension_comparison_pct}% of median)`}.
-            </p>
-            <p className="benchmark-source">{pension_source} · {pension_source_metric}</p>
-          </>
-        ) : pension_band_label ? (
-          <p className="benchmark-text benchmark-unavailable">
-            Benchmark data not yet available for the {pension_band_label} age group.
-          </p>
-        ) : (
-          <p className="benchmark-text benchmark-unavailable">
-            No pension benchmark data available for your age group.
           </p>
         )}
       </BenchmarkRow>
@@ -116,7 +96,7 @@ function HowYouCompare({ cmp, dobSet, postcodeSet }) {
               Your gross annual salary of <strong>{gbp(current_annual_salary)}</strong> is{' '}
               <strong>{comparisonWord(salary_vs_region_pct)}</strong> the median of{' '}
               <strong>{gbp(median_annual_salary_for_region)}</strong> for {regionLabel}
-              {salary_vs_region_pct !== null && ` (${salary_vs_region_pct}% of median)`}.
+              {salary_vs_region_pct !== null && ` (${gapPct(salary_vs_region_pct)})`}.
             </p>
             <p className="benchmark-source">{region_source} · all employees</p>
             {is_london && (
@@ -128,6 +108,33 @@ function HowYouCompare({ cmp, dobSet, postcodeSet }) {
         ) : (
           <p className="benchmark-text benchmark-unavailable">
             No regional salary benchmark data available.
+          </p>
+        )}
+      </BenchmarkRow>
+
+      {/* Pension pot */}
+      <BenchmarkRow label="Pension pot">
+        {!dobSet ? (
+          <p className="benchmark-prompt">
+            Add your date of birth above to see how your pension compares by age group.
+          </p>
+        ) : pension_band_label && pension_data_available ? (
+          <>
+            <p className="benchmark-text">
+              Your pension pot of <strong>{gbp(current_pension_pot)}</strong> is{' '}
+              <strong>{comparisonWord(pension_comparison_pct)}</strong> the UK median of{' '}
+              <strong>{gbp(median_pension_pot)}</strong> for the {pension_band_label} age group
+              {pension_comparison_pct !== null && ` (${gapPct(pension_comparison_pct)})`}.
+            </p>
+            <p className="benchmark-source">{pension_source} · {pension_source_metric}</p>
+          </>
+        ) : pension_band_label ? (
+          <p className="benchmark-text benchmark-unavailable">
+            Benchmark data not yet available for the {pension_band_label} age group.
+          </p>
+        ) : (
+          <p className="benchmark-text benchmark-unavailable">
+            No pension benchmark data available for your age group.
           </p>
         )}
       </BenchmarkRow>

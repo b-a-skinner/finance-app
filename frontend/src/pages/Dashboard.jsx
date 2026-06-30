@@ -6,9 +6,58 @@ import { useAuth } from '../context/AuthContext';
 const gbp = n =>
   new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
 
+function formatMonthDelta(monthDelta) {
+  const totalDays = Math.round(Math.abs(monthDelta) * 30.44);
+  if (totalDays < 1) return null;
+  const whole = Math.floor(Math.abs(monthDelta));
+  const days  = Math.round((Math.abs(monthDelta) - whole) * 30.44);
+  const mo = n => `${n} ${n === 1 ? 'month' : 'months'}`;
+  const dy = n => `${n} ${n === 1 ? 'day' : 'days'}`;
+  if (whole === 0) return dy(days);
+  if (days === 0)  return mo(whole);
+  return `${mo(whole)}, ${dy(days)}`;
+}
+
+function ChangeIndicator({ metric }) {
+  if (!metric) return null;
+  const { direction, absolute_change, elapsed_days } = metric;
+  if (direction === 'unchanged') return null;
+
+  const arrow = direction === 'up' ? '↑' : '↓';
+  const sign  = absolute_change >= 0 ? '+' : '';
+
+  return (
+    <span className="change-indicator">
+      {arrow} {sign}{gbp(Math.abs(absolute_change))}
+      <span className="change-indicator-period"> ({elapsed_days}d ago)</span>
+    </span>
+  );
+}
+
+function RunwayChangeIndicator({ metric }) {
+  if (!metric) return null;
+  const { direction, absolute_change, elapsed_days, current_value } = metric;
+  if (direction === 'unchanged') return null;
+
+  const label = formatMonthDelta(absolute_change);
+  if (!label) return null;
+
+  const warn = current_value < 3 && direction === 'down';
+  const cls  = `change-indicator${warn ? ' change-indicator--warn' : ''}`;
+  const arrow = direction === 'up' ? '↑' : '↓';
+
+  return (
+    <span className={cls}>
+      {arrow} {label}
+      <span className="change-indicator-period"> ({elapsed_days}d ago)</span>
+    </span>
+  );
+}
+
 export default function Dashboard() {
   const { apiFetch } = useAuth();
   const [summary, setSummary] = useState(null);
+  const [changes, setChanges] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -19,6 +68,11 @@ export default function Dashboard() {
       })
       .then(setSummary)
       .catch(err => setError(err.message));
+
+    apiFetch('/api/finance/changes')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => data && setChanges(data))
+      .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error) {
@@ -47,6 +101,10 @@ export default function Dashboard() {
   } = summary;
   const hasIncome = t.gross_annual > 0;
   const totalOutgoings = monthly_expenses + monthly_debt_payments + monthly_savings_contributions;
+
+  // Pick the most granular period available (weekly > monthly)
+  const period = changes?.weekly ?? changes?.monthly ?? null;
+  const periodLabel = period?.label ?? null;
 
   function formatRunway(months) {
     const whole = Math.floor(months);
@@ -94,13 +152,17 @@ export default function Dashboard() {
               <p className={`hero-amount ${monthly_disposable >= 0 ? 'positive' : 'negative'}`}>
                 {gbp(monthly_disposable)}
               </p>
+              <ChangeIndicator metric={period?.monthly_disposable_income} />
               <p className="hero-sub">after tax, deductions &amp; outgoings</p>
             </div>
 
             <div className="cards-grid">
               {/* ── Net Worth ── */}
               <div className="card net-worth-card">
-                <p className="card-title">Net Worth</p>
+                <p className="card-title">
+                  Net Worth
+                  <ChangeIndicator metric={period?.net_worth} />
+                </p>
                 <p className={`net-worth-amount ${net_worth >= 0 ? 'nw-positive' : 'nw-negative'}`}>
                   {gbp(net_worth)}
                 </p>
@@ -108,11 +170,17 @@ export default function Dashboard() {
                   <tbody>
                     <tr>
                       <td>Savings</td>
-                      <td>{gbp(total_savings_balance)}</td>
+                      <td>
+                        {gbp(total_savings_balance)}
+                        <ChangeIndicator metric={period?.total_savings_balance} />
+                      </td>
                     </tr>
                     <tr>
                       <td>Pension pot</td>
-                      <td>{gbp(pension_pot_balance)}</td>
+                      <td>
+                        {gbp(pension_pot_balance)}
+                        <ChangeIndicator metric={period?.pension_pot_balance} />
+                      </td>
                     </tr>
                     <tr>
                       <td>Assets</td>
@@ -120,7 +188,10 @@ export default function Dashboard() {
                     </tr>
                     <tr className="row-muted">
                       <td>Total debt</td>
-                      <td>−{gbp(total_debt_balance)}</td>
+                      <td>
+                        −{gbp(total_debt_balance)}
+                        <ChangeIndicator metric={period?.total_debt_balance} />
+                      </td>
                     </tr>
                     <tr className="row-total">
                       <td>Net worth</td>
@@ -130,6 +201,9 @@ export default function Dashboard() {
                     </tr>
                   </tbody>
                 </table>
+                {periodLabel && (
+                  <p className="change-period-label">{periodLabel}</p>
+                )}
               </div>
 
               {/* ── Income & deductions ── */}
@@ -235,6 +309,7 @@ export default function Dashboard() {
                     {formatRunway(months_of_runway)}
                   </span>
                   <span className="runway-sub">of expenses covered by savings</span>
+                  <RunwayChangeIndicator metric={period?.months_of_runway} />
                 </div>
                 <p className="runway-supporting">
                   based on {gbp(monthly_expenses + monthly_debt_payments)}/month in expenses
