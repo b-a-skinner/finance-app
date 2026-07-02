@@ -3,7 +3,7 @@ import NavBar from '../components/NavBar';
 import InfoTip from '../components/InfoTip';
 import { useResource } from '../hooks/useResource';
 
-const EMPTY = { label: '', gross_annual_salary: '', pay_frequency: 'annual' };
+const EMPTY = { label: '', gross_annual_salary: '' };
 const PAY_LABEL = { annual: 'annually', monthly: 'monthly', weekly: 'weekly' };
 
 const gbp = n => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
@@ -25,7 +25,6 @@ export default function Income() {
     setForm({
       label: item.label,
       gross_annual_salary: item.gross_annual_salary,
-      pay_frequency: item.pay_frequency,
     });
     setFormError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -47,7 +46,7 @@ export default function Income() {
     const data = {
       label: form.label.trim(),
       gross_annual_salary: salary,
-      pay_frequency: form.pay_frequency,
+      pay_frequency: 'annual',
     };
     setSaving(true);
     try {
@@ -105,18 +104,6 @@ export default function Income() {
                   placeholder="e.g. 50000"
                 />
                 <span className="form-hint">Always enter the annual total. £4,000/month = £48,000.</span>
-              </div>
-              <div className="form-group">
-                <label htmlFor="inc-freq">Pay frequency</label>
-                <select
-                  id="inc-freq"
-                  value={form.pay_frequency}
-                  onChange={e => field('pay_frequency', e.target.value)}
-                >
-                  <option value="annual">Annual</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="weekly">Weekly</option>
-                </select>
               </div>
               <div className="form-actions">
                 <button type="submit" className="btn-primary" disabled={saving}>

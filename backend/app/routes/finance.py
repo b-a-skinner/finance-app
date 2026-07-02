@@ -30,6 +30,15 @@ class TakeHomeOut(BaseModel):
     net_monthly: float
 
 
+class CompletionStatusOut(BaseModel):
+    income: bool
+    expenses: bool
+    debts: bool
+    savings: bool
+    pension: bool
+    assets: bool
+
+
 class FinancialSummaryOut(BaseModel):
     user_id: int
     tax_year: str
@@ -44,6 +53,7 @@ class FinancialSummaryOut(BaseModel):
     total_debt_balance: float
     net_worth: float
     months_of_runway: float | None
+    completion_status: CompletionStatusOut
 
 
 class MetricChangeOut(BaseModel):
@@ -193,6 +203,14 @@ def get_financial_summary(
         total_debt_balance=total_debt_balance,
         net_worth=net_worth,
         months_of_runway=months_of_runway,
+        completion_status=CompletionStatusOut(
+            income=len(income_sources) > 0,
+            expenses=len(expenses) > 0,
+            debts=len(all_debts) > 0,
+            savings=len(savings_goals) > 0,
+            pension=len(all_pension_pots) > 0,
+            assets=len(all_assets) > 0,
+        ),
     )
 
 

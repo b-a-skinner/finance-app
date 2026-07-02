@@ -1,10 +1,31 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import NavBar from '../components/NavBar';
+import { useAuth } from '../context/AuthContext';
 import { useResource } from '../hooks/useResource';
 
 const EMPTY = { name: '', current_balance: '', target_amount: '', monthly_contribution: '' };
 
 const gbp = n => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
+
+function formatDuration(months) {
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  if (years === 0) return `${months} ${months === 1 ? 'month' : 'months'}`;
+  if (remainingMonths === 0) return `${years} ${years === 1 ? 'year' : 'years'}`;
+  return `${years} ${years === 1 ? 'year' : 'years'}, ${remainingMonths} ${remainingMonths === 1 ? 'month' : 'months'}`;
+}
+
+function ageAtGoal(dateOfBirth, monthsToGoal) {
+  if (!dateOfBirth) return null;
+  const today = new Date();
+  const goalDate = new Date(today);
+  goalDate.setMonth(goalDate.getMonth() + monthsToGoal);
+  const dob = new Date(dateOfBirth);
+  let age = goalDate.getFullYear() - dob.getFullYear();
+  const m = goalDate.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && goalDate.getDate() < dob.getDate())) age--;
+  return age;
+}
 
 function ProgressBar({ current, target }) {
   const pct = target > 0 ? Math.min(100, (current / target) * 100) : 0;
@@ -15,13 +36,78 @@ function ProgressBar({ current, target }) {
   );
 }
 
+function ProjectionBlock({ item, projection, dateOfBirth }) {
+  const hasTarget = item.target_amount != null && item.target_amount > 0;
+  if (!hasTarget) return null;
+
+  if (item.current_balance >= item.target_amount) {
+    return (
+      <div className="projection-block projection-block--good">
+        <p className="projection-headline">You've already reached this goal 🎉</p>
+      </div>
+    );
+  }
+
+  if (item.monthly_contribution <= 0) {
+    return (
+      <p className="projection-prompt">
+        Add a monthly contribution to see when you'll reach this goal.
+      </p>
+    );
+  }
+
+  if (!projection) return null;
+
+  const months = projection.months_to_goal;
+  const duration = formatDuration(months);
+  const age = ageAtGoal(dateOfBirth, months);
+
+  return (
+    <div className="projection-block projection-block--neutral">
+      <p className="projection-headline">
+        At your current contribution of {gbp(item.monthly_contribution)}/month, you'll reach your
+        goal in <strong>{duration}</strong> — by <strong>{projection.projected_date}</strong>
+        {age !== null ? ` (when you'll be ${age})` : ''}.
+      </p>
+    </div>
+  );
+}
+
 export default function Savings() {
+  const { apiFetch } = useAuth();
   const { items, loading, error, create, update, remove } = useResource('/api/savings');
+  const [projections, setProjections] = useState({});
+  const [dateOfBirth, setDateOfBirth] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [actionError, setActionError] = useState('');
+
+  useEffect(() => {
+    apiFetch('/api/profile')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.date_of_birth) setDateOfBirth(data.date_of_birth); })
+      .catch(() => {});
+  }, [apiFetch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const eligible = items.filter(
+      item =>
+        item.target_amount != null &&
+        item.target_amount > 0 &&
+        item.monthly_contribution > 0 &&
+        item.current_balance < item.target_amount,
+    );
+    eligible.forEach(item => {
+      apiFetch(`/api/savings/${item.id}/projection`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data) setProjections(prev => ({ ...prev, [item.id]: data }));
+        })
+        .catch(() => {});
+    });
+  }, [items, apiFetch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function field(key, val) {
     setForm(prev => ({ ...prev, [key]: val }));
@@ -32,7 +118,7 @@ export default function Savings() {
     setForm({
       name: item.name,
       current_balance: item.current_balance,
-      target_amount: item.target_amount,
+      target_amount: item.target_amount ?? '',
       monthly_contribution: item.monthly_contribution,
     });
     setFormError('');
@@ -49,12 +135,12 @@ export default function Savings() {
     e.preventDefault();
     setFormError('');
     const current = parseFloat(form.current_balance);
-    const target = parseFloat(form.target_amount);
+    const target = form.target_amount !== '' ? parseFloat(form.target_amount) : null;
     const contrib = parseFloat(form.monthly_contribution);
 
     if (!form.name.trim()) { setFormError('Name is required.'); return; }
     if (isNaN(current) || current < 0) { setFormError('Enter a valid current balance.'); return; }
-    if (isNaN(target) || target <= 0) { setFormError('Enter a valid target amount.'); return; }
+    if (target !== null && (isNaN(target) || target < 0)) { setFormError('Enter a valid target amount.'); return; }
     if (isNaN(contrib) || contrib < 0) { setFormError('Enter a valid monthly contribution.'); return; }
 
     const data = {
@@ -81,6 +167,7 @@ export default function Savings() {
 
   async function handleDelete(id) {
     setActionError('');
+    setProjections(prev => { const n = { ...prev }; delete n[id]; return n; });
     try { await remove(id); } catch (err) { setActionError(err.message); }
   }
 
@@ -120,7 +207,7 @@ export default function Savings() {
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="sav-target">Target amount (£)</label>
+                <label htmlFor="sav-target">Target amount (£) <span className="form-hint-inline">(optional)</span></label>
                 <input
                   id="sav-target"
                   type="number"
@@ -165,7 +252,8 @@ export default function Savings() {
             ) : (
               <ul className="item-list">
                 {items.map(item => {
-                  const pct = item.target_amount > 0
+                  const hasTarget = item.target_amount != null && item.target_amount > 0;
+                  const pct = hasTarget
                     ? Math.min(100, (item.current_balance / item.target_amount) * 100)
                     : 0;
                   return (
@@ -173,17 +261,22 @@ export default function Savings() {
                       <div className="item-info">
                         <span className="item-name">{item.name}</span>
                         <span className="item-detail">
-                          {gbp(item.current_balance)} of {gbp(item.target_amount)} · {gbp(item.monthly_contribution)}/mo
+                          {hasTarget
+                            ? `${gbp(item.current_balance)} of ${gbp(item.target_amount)} · ${gbp(item.monthly_contribution)}/mo`
+                            : `${gbp(item.current_balance)} saved · ${gbp(item.monthly_contribution)}/mo`}
                         </span>
-                        <div className="savings-progress">
-                          <ProgressBar current={item.current_balance} target={item.target_amount} />
-                          <span className="savings-pct">{pct.toFixed(1)}%</span>
-                        </div>
+                        {hasTarget && (
+                          <div className="savings-progress">
+                            <ProgressBar current={item.current_balance} target={item.target_amount} />
+                            <span className="savings-pct">{pct.toFixed(1)}%</span>
+                          </div>
+                        )}
                       </div>
                       <div className="item-actions">
                         <button className="btn-sm" onClick={() => startEdit(item)}>Edit</button>
                         <button className="btn-sm btn-danger" onClick={() => handleDelete(item.id)}>Delete</button>
                       </div>
+                      <ProjectionBlock item={item} projection={projections[item.id]} dateOfBirth={dateOfBirth} />
                     </li>
                   );
                 })}

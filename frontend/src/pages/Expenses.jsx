@@ -2,7 +2,7 @@ import { useState } from 'react';
 import NavBar from '../components/NavBar';
 import { useResource } from '../hooks/useResource';
 
-const EMPTY = { category: '', amount: '', frequency: 'monthly', is_fixed: true };
+const EMPTY = { category: '', amount: '', frequency: 'monthly' };
 const FREQ = { annual: 'per year', monthly: 'per month', weekly: 'per week' };
 
 const gbp = n => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
@@ -25,7 +25,6 @@ export default function Expenses() {
       category: item.category,
       amount: item.amount,
       frequency: item.frequency,
-      is_fixed: item.is_fixed,
     });
     setFormError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -48,7 +47,7 @@ export default function Expenses() {
       category: form.category.trim(),
       amount,
       frequency: form.frequency,
-      is_fixed: form.is_fixed,
+      is_fixed: true,
     };
     setSaving(true);
     try {
@@ -117,15 +116,6 @@ export default function Expenses() {
                   <option value="annual">Annual</option>
                   <option value="weekly">Weekly</option>
                 </select>
-              </div>
-              <div className="form-group form-check">
-                <input
-                  id="exp-fixed"
-                  type="checkbox"
-                  checked={form.is_fixed}
-                  onChange={e => field('is_fixed', e.target.checked)}
-                />
-                <label htmlFor="exp-fixed">Fixed expense (same amount every period)</label>
               </div>
               <div className="form-actions">
                 <button type="submit" className="btn-primary" disabled={saving}>

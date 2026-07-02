@@ -113,7 +113,7 @@ class LoanProjectionOut(BaseModel):
 class SavingsCreate(BaseModel):
     name: str
     current_balance: float
-    target_amount: float
+    target_amount: float | None = None
     monthly_contribution: float
 
 
@@ -129,9 +129,21 @@ class SavingsOut(BaseModel):
     id: int
     name: str
     current_balance: float
-    target_amount: float
+    target_amount: float | None
     monthly_contribution: float
     is_active: bool
+
+    @field_validator('target_amount', mode='before')
+    @classmethod
+    def zero_target_to_none(cls, v):
+        if v == 0.0:
+            return None
+        return v
+
+
+class SavingsProjectionOut(BaseModel):
+    months_to_goal: int
+    projected_date: str
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +225,24 @@ class ProfileOut(BaseModel):
     occupation: str | None
     postcode_outward: str | None
     region: str | None
+
+
+# ---------------------------------------------------------------------------
+# Onboarding
+# ---------------------------------------------------------------------------
+
+class OnboardingUpdate(BaseModel):
+    onboarding_completed: bool | None = None
+    onboarding_dismiss_count: int | None = None
+    financial_goals: str | None = None
+    current_onboarding_step: int | None = None
+
+
+class OnboardingOut(BaseModel):
+    onboarding_completed: bool
+    onboarding_dismiss_count: int
+    financial_goals: str | None
+    current_onboarding_step: int
 
 
 # ---------------------------------------------------------------------------

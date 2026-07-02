@@ -6,9 +6,9 @@ const NAV_LINKS = [
   { to: '/income', label: 'Income' },
   { to: '/expenses', label: 'Expenses' },
   { to: '/debts', label: 'Debts' },
-  { to: '/assets', label: 'Assets' },
   { to: '/savings', label: 'Savings' },
   { to: '/pension', label: 'Pension' },
+  { to: '/assets', label: 'Assets' },
   { to: '/profile', label: 'Profile' },
 ];
 

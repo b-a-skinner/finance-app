@@ -7,7 +7,7 @@ from app.database import get_db
 from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, IncomeSource, PensionPot, RegionalSalaryBenchmark
 from app.models.user import User
 from app.routes.auth import get_current_user
-from app.schemas import AgeComparisonOut, ProfileOut, ProfileUpdate
+from app.schemas import AgeComparisonOut, OnboardingOut, OnboardingUpdate, ProfileOut, ProfileUpdate
 from app.services.age_benchmark import get_age_comparison, get_regional_comparison
 from app.services.postcode_lookup import get_region_from_postcode
 
@@ -39,6 +39,34 @@ def update_profile(
     db.commit()
     db.refresh(current_user)
     return _to_out(current_user)
+
+
+@router.get("/onboarding", response_model=OnboardingOut)
+def get_onboarding(current_user: User = Depends(get_current_user)):
+    return OnboardingOut(
+        onboarding_completed=current_user.onboarding_completed,
+        onboarding_dismiss_count=current_user.onboarding_dismiss_count,
+        financial_goals=current_user.financial_goals,
+        current_onboarding_step=current_user.current_onboarding_step,
+    )
+
+
+@router.patch("/onboarding", response_model=OnboardingOut)
+def update_onboarding(
+    body: OnboardingUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(current_user, field, value)
+    db.commit()
+    db.refresh(current_user)
+    return OnboardingOut(
+        onboarding_completed=current_user.onboarding_completed,
+        onboarding_dismiss_count=current_user.onboarding_dismiss_count,
+        financial_goals=current_user.financial_goals,
+        current_onboarding_step=current_user.current_onboarding_step,
+    )
 
 
 @router.get("/comparison", response_model=AgeComparisonOut)

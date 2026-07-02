@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import InfoTip from '../components/InfoTip';
+import OnboardingWizard from '../components/OnboardingWizard';
+import ChecklistPanel from '../components/ChecklistPanel';
 import { useAuth } from '../context/AuthContext';
 
 const gbp = n =>
@@ -59,6 +61,8 @@ export default function Dashboard() {
   const { apiFetch } = useAuth();
   const [summary, setSummary] = useState(null);
   const [changes, setChanges] = useState(null);
+  const [onboarding, setOnboarding] = useState(null);
+  const [showWizard, setShowWizard] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -74,7 +78,33 @@ export default function Dashboard() {
       .then(res => res.ok ? res.json() : null)
       .then(data => data && setChanges(data))
       .catch(() => {});
+
+    apiFetch('/api/profile/onboarding')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!data) return;
+        setOnboarding(data);
+        if (!data.onboarding_completed && data.onboarding_dismiss_count < 2) {
+          setShowWizard(true);
+        }
+      })
+      .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleWizardComplete() {
+    setShowWizard(false);
+    setOnboarding(prev => prev ? { ...prev, onboarding_completed: true } : prev);
+    // Refresh summary so completion_status updates
+    apiFetch('/api/finance/summary')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => data && setSummary(data))
+      .catch(() => {});
+  }
+
+  function handleWizardDismiss() {
+    setShowWizard(false);
+    setOnboarding(prev => prev ? { ...prev, onboarding_dismiss_count: (prev.onboarding_dismiss_count ?? 0) + 1 } : prev);
+  }
 
   if (error) {
     return (
@@ -130,9 +160,20 @@ export default function Dashboard() {
     return "Over 6 months of cover — a strong position relative to your current spending.";
   }
 
+  const completionStatus = summary?.completion_status ?? null;
+
   return (
     <>
       <NavBar />
+      {showWizard && (
+        <OnboardingWizard
+          initialStep={onboarding?.current_onboarding_step ?? 0}
+          dismissCount={onboarding?.onboarding_dismiss_count ?? 0}
+          onComplete={handleWizardComplete}
+          onDismiss={handleWizardDismiss}
+        />
+      )}
+      <div className="dashboard-wrapper">
       <main className="dashboard">
         {!hasIncome ? (
           <div className="empty-state">
@@ -322,6 +363,8 @@ export default function Dashboard() {
           </>
         )}
       </main>
+      {completionStatus && <ChecklistPanel status={completionStatus} />}
+      </div>
     </>
   );
 }
