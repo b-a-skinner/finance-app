@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import NavBar from '../components/NavBar';
 import { useAuth } from '../context/AuthContext';
+import { gbp } from '../utils/format';
+import { API_BASE } from '../utils/config';
 
 const EMPTY = { date_of_birth: '', occupation: '', postcode_outward: '' };
-
-function gbp(n) {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n);
-}
 
 function comparisonWord(pct) {
   if (pct === null || pct === undefined) return null;
@@ -145,6 +143,8 @@ function HowYouCompare({ cmp, dobSet, postcodeSet }) {
 export default function Profile() {
   const { apiFetch } = useAuth();
   const [form, setForm] = useState(EMPTY);
+  const [occupations, setOccupations] = useState([]);
+  const [showOccDropdown, setShowOccDropdown] = useState(false);
   const [region, setRegion] = useState(null);
   const [regionKnown, setRegionKnown] = useState(false);
   const [dobSet, setDobSet] = useState(false);
@@ -183,6 +183,23 @@ export default function Profile() {
   }, [apiFetch, loadComparison]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/occupations`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setOccupations)
+      .catch(() => {});
+  }, []);
+
+  const filteredOccs = form.occupation.length >= 1
+    ? occupations.filter(o => o.title.toLowerCase().includes(form.occupation.toLowerCase()))
+    : [];
+
+  const groupedOccs = filteredOccs.reduce((acc, o) => {
+    if (!acc[o.soc_group]) acc[o.soc_group] = [];
+    acc[o.soc_group].push(o);
+    return acc;
+  }, {});
 
   function field(key, val) {
     setForm(prev => ({ ...prev, [key]: val }));
@@ -263,15 +280,51 @@ export default function Profile() {
                   onChange={e => field('date_of_birth', e.target.value)}
                 />
               </div>
-              <div className="form-group">
+              <div className="form-group wizard-occ-group">
                 <label htmlFor="occupation">Occupation</label>
-                <input
-                  id="occupation"
-                  type="text"
-                  value={form.occupation}
-                  onChange={e => field('occupation', e.target.value)}
-                  placeholder="e.g. Software Engineer, Teacher, Nurse"
-                />
+                <div className="wizard-occ-wrap">
+                  <input
+                    id="occupation"
+                    type="text"
+                    autoComplete="off"
+                    value={form.occupation}
+                    onChange={e => { field('occupation', e.target.value); setShowOccDropdown(true); }}
+                    onFocus={() => setShowOccDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowOccDropdown(false), 150)}
+                    placeholder="Search occupations…"
+                  />
+                  {showOccDropdown && form.occupation.length >= 1 && (
+                    Object.keys(groupedOccs).length > 0 ? (
+                      <ul className="wizard-occ-dropdown">
+                        {Object.entries(groupedOccs).map(([group, items]) => (
+                          <li key={group} className="wizard-occ-group-item">
+                            <div className="wizard-occ-group-header">{group}</div>
+                            {items.map(occ => (
+                              <div
+                                key={occ.id}
+                                className="wizard-occ-option"
+                                onMouseDown={() => { field('occupation', occ.title); setShowOccDropdown(false); }}
+                              >
+                                {occ.title}
+                              </div>
+                            ))}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <ul className="wizard-occ-dropdown">
+                        <li className="wizard-occ-group-item">
+                          <div
+                            className="wizard-occ-option wizard-occ-option--freetext"
+                            onMouseDown={() => { field('occupation', form.occupation.trim()); setShowOccDropdown(false); }}
+                          >
+                            Use &ldquo;{form.occupation.trim()}&rdquo; as my occupation →
+                          </div>
+                        </li>
+                      </ul>
+                    )
+                  )}
+                </div>
               </div>
               <div className="form-group">
                 <label htmlFor="postcode">Postcode area</label>

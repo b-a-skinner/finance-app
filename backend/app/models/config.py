@@ -91,3 +91,14 @@ class RegionalSalaryBenchmark(Base):
     median_annual_salary: Mapped[float] = mapped_column(Float, nullable=False)
     source: Mapped[str] = mapped_column(String(255), nullable=False)
     source_notes: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
+class OccupationCode(Base):
+    """SOC 2020 occupation reference data for the occupation combobox."""
+
+    __tablename__ = "occupation_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    soc_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    soc_group: Mapped[str] = mapped_column(String(100), nullable=False)

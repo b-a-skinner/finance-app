@@ -5,7 +5,7 @@ import { useResource } from '../hooks/useResource';
 const EMPTY = { category: '', amount: '', frequency: 'monthly' };
 const FREQ = { annual: 'per year', monthly: 'per month', weekly: 'per week' };
 
-const gbp = n => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
+import { gbp } from '../utils/format';
 
 export default function Expenses() {
   const { items, loading, error, create, update, remove } = useResource('/api/expenses');

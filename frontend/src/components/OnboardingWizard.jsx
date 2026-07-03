@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { gbp } from '../utils/format';
+import { API_BASE } from '../utils/config';
 
 const STEPS = ['about_you', 'goals', 'income', 'expenses', 'debts', 'savings', 'pension', 'assets'];
 
@@ -18,7 +20,7 @@ const STEP_TITLES = {
   income:    'Add your income',
   expenses:  'Add your expenses',
   debts:     'Add any debts',
-  savings:   'Add savings goals',
+  savings:   'Add your savings & investments',
   pension:   'Set up your pension',
   assets:    'Add other assets',
 };
@@ -29,12 +31,10 @@ const STEP_DESCRIPTIONS = {
   income:    "Enter your salary so we can calculate take-home pay, tax, and National Insurance. You can add multiple income sources.",
   expenses:  "Add your regular monthly outgoings (rent, bills, subscriptions) so we can calculate how much you have left each month.",
   debts:     "Add any outstanding debts — credit cards, student loans, mortgages — to include them in your net worth.",
-  savings:   "Track savings accounts and goals. We'll show how long until you reach each target.",
+  savings:   "Add your cash savings, ISAs, investment accounts, and trading accounts to get a complete picture of your wealth.",
   pension:   "Enter your pension balance and contribution rates to include your pot in net worth calculations.",
   assets:    "Add other assets — property, vehicles, investments — to complete your net worth picture.",
 };
-
-const gbp = n => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
 
 const DEBT_LABELS = { credit_card: 'Credit card', mortgage: 'Mortgage', student_loan: 'Student loan', other: 'Other' };
 const ASSET_LABELS = { property: 'Property', vehicle: 'Vehicle', investment: 'Investment', other: 'Other' };
@@ -58,14 +58,244 @@ function ExistingList({ items, renderItem }) {
   );
 }
 
-function AboutYouStep({ onNext }) {
+function AboutYouStep({ onNext, onFirstNameChange }) {
+  const { apiFetch } = useAuth();
+  const [form, setForm] = useState({
+    first_name: '',
+    dob_day: '', dob_month: '', dob_year: '',
+    occupation_text: '', occupation_soc_code: '',
+    postcode: '',
+  });
+  const [occupations, setOccupations] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  // Fetch existing profile data to pre-populate on back-navigation
+  useEffect(() => {
+    apiFetch('/api/profile')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const parts = data.date_of_birth ? data.date_of_birth.split('-') : ['', '', ''];
+        setForm(p => ({
+          ...p,
+          first_name: data.first_name ?? '',
+          dob_year: parts[0] ?? '',
+          dob_month: parts[1] ?? '',
+          dob_day: parts[2] ?? '',
+          occupation_text: data.occupation ?? '',
+          postcode: data.postcode_outward ?? '',
+        }));
+      })
+      .catch(() => {});
+  }, [apiFetch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch occupation list once (no auth needed)
+  useEffect(() => {
+    fetch(`${API_BASE}/api/occupations`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setOccupations)
+      .catch(() => {});
+  }, []);
+
+  const filtered = form.occupation_text.length >= 1
+    ? occupations.filter(o =>
+        o.title.toLowerCase().includes(form.occupation_text.toLowerCase())
+      )
+    : [];
+
+  const grouped = filtered.reduce((acc, o) => {
+    if (!acc[o.soc_group]) acc[o.soc_group] = [];
+    acc[o.soc_group].push(o);
+    return acc;
+  }, {});
+
+  function selectOccupation(occ) {
+    setForm(p => ({ ...p, occupation_text: occ.title, occupation_soc_code: occ.soc_code }));
+    setShowDropdown(false);
+  }
+
+  function validateDob() {
+    const { dob_day, dob_month, dob_year } = form;
+    if (!dob_day && !dob_month && !dob_year) return null;
+    if (!dob_day || !dob_month || !dob_year) return 'Please enter a complete date of birth.';
+    const day = parseInt(dob_day, 10);
+    const month = parseInt(dob_month, 10);
+    const year = parseInt(dob_year, 10);
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return 'Invalid date.';
+    if (month < 1 || month > 12) return 'Month must be between 1 and 12.';
+    if (day < 1 || day > 31) return 'Day must be between 1 and 31.';
+    const dob = new Date(year, month - 1, day);
+    if (dob.getMonth() !== month - 1) return 'Invalid date.';
+    const now = new Date();
+    if (dob >= now) return 'Date of birth must be in the past.';
+    let age = now.getFullYear() - dob.getFullYear();
+    if (now < new Date(now.getFullYear(), dob.getMonth(), dob.getDate())) age--;
+    if (age < 16) return 'You must be at least 16 years old.';
+    if (age > 100) return 'Please enter a valid date of birth.';
+    return null;
+  }
+
+  function validatePostcode() {
+    const pc = form.postcode.trim();
+    if (!pc) return null;
+    if (!/^[A-Za-z]{1,2}[0-9]{1,2}[A-Za-z]?$/.test(pc)) {
+      return 'Enter just the first part of your postcode, e.g. SW1A or M1.';
+    }
+    return null;
+  }
+
+  async function handleContinue() {
+    setError('');
+    const dobErr = validateDob();
+    if (dobErr) { setError(dobErr); return; }
+    const pcErr = validatePostcode();
+    if (pcErr) { setError(pcErr); return; }
+
+    const payload = {};
+    if (form.first_name.trim()) payload.first_name = form.first_name.trim();
+    const { dob_day, dob_month, dob_year } = form;
+    if (dob_day && dob_month && dob_year) {
+      payload.date_of_birth =
+        `${dob_year.padStart(4, '0')}-${dob_month.padStart(2, '0')}-${dob_day.padStart(2, '0')}`;
+    }
+    if (form.occupation_text.trim()) payload.occupation = form.occupation_text.trim();
+    if (form.postcode.trim()) payload.postcode_outward = form.postcode.trim().toUpperCase();
+
+    if (Object.keys(payload).length > 0) {
+      setSaving(true);
+      try {
+        const res = await apiFetch('/api/profile', {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const b = await res.json().catch(() => ({}));
+          throw new Error(b.detail || 'Failed to save profile.');
+        }
+      } catch (err) {
+        setError(err.message);
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
+    }
+
+    if (form.first_name.trim()) onFirstNameChange(form.first_name.trim());
+    onNext();
+  }
+
   return (
     <div className="wizard-step-body">
-      <p className="wizard-placeholder-note">
-        Full profile setup is coming soon. Click Continue to set up your finances now.
-      </p>
+      {error && <p className="wizard-error">{error}</p>}
+      <div className="wizard-form">
+        <div className="form-group">
+          <label htmlFor="ay-first-name">First name</label>
+          <input
+            id="ay-first-name"
+            type="text"
+            value={form.first_name}
+            onChange={e => setForm(p => ({ ...p, first_name: e.target.value }))}
+            placeholder="e.g. Ben"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Date of birth</label>
+          <div className="wizard-dob-row">
+            <input
+              type="number" min="1" max="31"
+              value={form.dob_day}
+              onChange={e => setForm(p => ({ ...p, dob_day: e.target.value }))}
+              placeholder="DD"
+              className="wizard-dob-part wizard-dob-day"
+            />
+            <input
+              type="number" min="1" max="12"
+              value={form.dob_month}
+              onChange={e => setForm(p => ({ ...p, dob_month: e.target.value }))}
+              placeholder="MM"
+              className="wizard-dob-part wizard-dob-month"
+            />
+            <input
+              type="number" min="1900" max={new Date().getFullYear()}
+              value={form.dob_year}
+              onChange={e => setForm(p => ({ ...p, dob_year: e.target.value }))}
+              placeholder="YYYY"
+              className="wizard-dob-part wizard-dob-year"
+            />
+          </div>
+        </div>
+
+        <div className="form-group wizard-occ-group">
+          <label htmlFor="ay-occupation">Occupation</label>
+          <div className="wizard-occ-wrap">
+            <input
+              id="ay-occupation"
+              type="text"
+              autoComplete="off"
+              value={form.occupation_text}
+              onChange={e => {
+                setForm(p => ({ ...p, occupation_text: e.target.value, occupation_soc_code: '' }));
+                setShowDropdown(true);
+              }}
+              onFocus={() => setShowDropdown(true)}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+              placeholder="Search occupations…"
+            />
+            {showDropdown && form.occupation_text.length >= 1 && (
+              Object.keys(grouped).length > 0 ? (
+                <ul className="wizard-occ-dropdown">
+                  {Object.entries(grouped).map(([group, items]) => (
+                    <li key={group} className="wizard-occ-group-item">
+                      <div className="wizard-occ-group-header">{group}</div>
+                      {items.map(occ => (
+                        <div
+                          key={occ.id}
+                          className="wizard-occ-option"
+                          onMouseDown={() => selectOccupation(occ)}
+                        >
+                          {occ.title}
+                        </div>
+                      ))}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <ul className="wizard-occ-dropdown">
+                  <li className="wizard-occ-group-item">
+                    <div
+                      className="wizard-occ-option wizard-occ-option--freetext"
+                      onMouseDown={() => selectOccupation({ title: form.occupation_text.trim(), soc_code: null })}
+                    >
+                      Use &ldquo;{form.occupation_text.trim()}&rdquo; as my occupation →
+                    </div>
+                  </li>
+                </ul>
+              )
+            )}
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="ay-postcode">Postcode</label>
+          <input
+            id="ay-postcode"
+            type="text"
+            value={form.postcode}
+            onChange={e => setForm(p => ({ ...p, postcode: e.target.value }))}
+            placeholder="e.g. SW1A"
+          />
+          <span className="form-hint">Just the first part, e.g. SW1A or M1</span>
+        </div>
+      </div>
+
       <div className="wizard-step-actions">
-        <button className="btn-primary" onClick={onNext}>Continue</button>
+        <button className="btn-primary" onClick={handleContinue} disabled={saving}>
+          {saving ? 'Saving…' : 'Continue'}
+        </button>
+        <button className="btn-ghost" onClick={onNext}>Skip</button>
       </div>
     </div>
   );
@@ -309,9 +539,18 @@ function DebtsStep({ onNext, onBack }) {
   );
 }
 
+const WIZARD_ACCOUNT_TYPE_OPTIONS = [
+  { value: 'cash_savings',       label: 'Cash savings' },
+  { value: 'stocks_shares_isa',  label: 'Stocks & Shares ISA' },
+  { value: 'lifetime_isa',       label: 'Lifetime ISA' },
+  { value: 'investment_account', label: 'Investment account' },
+  { value: 'trading_account',    label: 'Trading account' },
+  { value: 'other',              label: 'Other' },
+];
+
 function SavingsStep({ onNext, onBack }) {
   const { apiFetch } = useAuth();
-  const [form, setForm] = useState({ name: '', current_balance: '', target_amount: '', monthly_contribution: '' });
+  const [form, setForm] = useState({ name: '', current_balance: '', target_amount: '', monthly_contribution: '', account_type: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [existing, setExisting] = useState([]);
@@ -337,12 +576,18 @@ function SavingsStep({ onNext, onBack }) {
     try {
       const res = await apiFetch('/api/savings', {
         method: 'POST',
-        body: JSON.stringify({ name: form.name.trim(), current_balance: balance, target_amount: target, monthly_contribution: monthly }),
+        body: JSON.stringify({
+          name: form.name.trim(),
+          current_balance: balance,
+          target_amount: target,
+          monthly_contribution: monthly,
+          account_type: form.account_type || null,
+        }),
       });
       if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.detail || 'Failed'); }
       const newItem = await res.json();
       setExisting(prev => [...prev, newItem]);
-      setForm({ name: '', current_balance: '', target_amount: '', monthly_contribution: '' });
+      setForm({ name: '', current_balance: '', target_amount: '', monthly_contribution: '', account_type: '' });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -362,6 +607,15 @@ function SavingsStep({ onNext, onBack }) {
       {error && <p className="wizard-error">{error}</p>}
       <form onSubmit={handleAdd} className="wizard-form">
         <div className="form-group">
+          <label>Account type</label>
+          <select value={form.account_type} onChange={e => setForm(p => ({ ...p, account_type: e.target.value }))}>
+            <option value="">Select type…</option>
+            {WIZARD_ACCOUNT_TYPE_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
           <label>Name</label>
           <input type="text" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Emergency fund" />
         </div>
@@ -377,7 +631,7 @@ function SavingsStep({ onNext, onBack }) {
           <label>Monthly contribution (£)</label>
           <input type="number" min="0" step="0.01" value={form.monthly_contribution} onChange={e => setForm(p => ({ ...p, monthly_contribution: e.target.value }))} placeholder="e.g. 200" />
         </div>
-        <button type="submit" className="btn-secondary" disabled={saving}>{saving ? 'Adding…' : 'Add savings goal'}</button>
+        <button type="submit" className="btn-secondary" disabled={saving}>{saving ? 'Adding…' : 'Add account'}</button>
       </form>
       <div className="wizard-step-actions">
         <button className="btn-secondary" onClick={onBack}>Back</button>
@@ -538,10 +792,11 @@ function AssetsStep({ onNext, onBack }) {
   );
 }
 
-export default function OnboardingWizard({ initialStep, dismissCount, onComplete, onDismiss }) {
+export default function OnboardingWizard({ initialStep, dismissCount, firstName: propFirstName, onFirstNameChange, onComplete, onDismiss }) {
   const { apiFetch } = useAuth();
   const [step, setStep] = useState(initialStep ?? 0);
   const [goalsSelected, setGoalsSelected] = useState([]);
+  const [wizardFirstName, setWizardFirstName] = useState(propFirstName ?? '');
 
   async function persistStep(nextStep) {
     try {
@@ -603,7 +858,9 @@ export default function OnboardingWizard({ initialStep, dismissCount, onComplete
         {isCompletion ? (
           <div className="wizard-completion">
             <div className="wizard-completion-icon">✓</div>
-            <h2 className="wizard-completion-title">You're all set!</h2>
+            <h2 className="wizard-completion-title">
+              {wizardFirstName ? `You're all set, ${wizardFirstName}!` : "You're all set!"}
+            </h2>
             <p className="wizard-completion-body">
               Your dashboard is ready. You can update any of these details from the individual pages at any time.
             </p>
@@ -623,7 +880,15 @@ export default function OnboardingWizard({ initialStep, dismissCount, onComplete
             <h2 className="wizard-title">{STEP_TITLES[stepKey]}</h2>
             <p className="wizard-description">{STEP_DESCRIPTIONS[stepKey]}</p>
 
-            {stepKey === 'about_you' && <AboutYouStep onNext={() => goTo(1)} />}
+            {stepKey === 'about_you' && (
+              <AboutYouStep
+                onNext={() => goTo(1)}
+                onFirstNameChange={name => {
+                  setWizardFirstName(name);
+                  onFirstNameChange?.(name);
+                }}
+              />
+            )}
             {stepKey === 'goals'    && <GoalsStep onSave={handleGoalsSave} onBack={() => goTo(0)} initialSelected={goalsSelected} />}
             {stepKey === 'income'   && <IncomeStep onNext={() => goTo(3)} onBack={() => goTo(1)} />}
             {stepKey === 'expenses' && <ExpensesStep onNext={() => goTo(4)} onBack={() => goTo(2)} />}

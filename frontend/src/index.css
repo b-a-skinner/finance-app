@@ -82,6 +82,9 @@ body {
   color: #fff;
 }
 
+@media (max-width: 767px) { .nav-label-desktop { display: none; } }
+@media (min-width: 768px) { .nav-label-mobile  { display: none; } }
+
 /* ── Auth pages ───────────────────────────────────────────── */
 .auth-page {
   min-height: 100vh;
@@ -745,6 +748,15 @@ body {
   background: color-mix(in srgb, var(--color-text-muted) 6%, var(--color-surface));
 }
 
+.projection-block--warn {
+  border-color: #d97706;
+  background: color-mix(in srgb, #d97706 8%, var(--color-surface));
+}
+
+.projection-block--warn .projection-headline {
+  color: #d97706;
+}
+
 .projection-headline {
   font-size: 0.875rem;
   color: var(--color-text);
@@ -1171,6 +1183,95 @@ body {
 .wizard-required-hint {
   font-size: 0.75rem;
   color: var(--color-text-muted);
+}
+
+/* ── Wizard About You step ───────────────────────────────────────────────── */
+.wizard-dob-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.wizard-dob-part {
+  min-width: 0;
+}
+
+.wizard-dob-day,
+.wizard-dob-month {
+  flex: 1;
+}
+
+.wizard-dob-year {
+  flex: 2;
+}
+
+/* Occupation combobox */
+.wizard-occ-group {
+  position: relative;
+}
+
+.wizard-occ-wrap {
+  position: relative;
+}
+
+.wizard-occ-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  max-height: 220px;
+  overflow-y: auto;
+  list-style: none;
+  padding: 0;
+  margin: 2px 0 0 0;
+}
+
+.wizard-occ-group-item {
+  list-style: none;
+}
+
+.wizard-occ-group-header {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  position: sticky;
+  top: 0;
+}
+
+.wizard-occ-option {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: var(--color-text);
+}
+
+.wizard-occ-option:hover {
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+  color: var(--color-primary);
+}
+
+.wizard-occ-option--freetext {
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
+.wizard-occ-option--freetext:hover {
+  color: var(--color-primary);
+}
+
+/* Dashboard greeting */
+.dashboard-greeting {
+  font-size: 1rem;
+  color: var(--color-text-muted);
+  margin: 0 0 0.5rem 0;
 }
 
 .wizard-placeholder-note {

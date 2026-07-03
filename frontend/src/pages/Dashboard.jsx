@@ -6,8 +6,7 @@ import OnboardingWizard from '../components/OnboardingWizard';
 import ChecklistPanel from '../components/ChecklistPanel';
 import { useAuth } from '../context/AuthContext';
 
-const gbp = n =>
-  new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
+import { gbp } from '../utils/format';
 
 function formatMonthDelta(monthDelta) {
   const totalDays = Math.round(Math.abs(monthDelta) * 30.44);
@@ -63,6 +62,7 @@ export default function Dashboard() {
   const [changes, setChanges] = useState(null);
   const [onboarding, setOnboarding] = useState(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [firstName, setFirstName] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -89,12 +89,16 @@ export default function Dashboard() {
         }
       })
       .catch(() => {});
+
+    apiFetch('/api/profile')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data?.first_name) setFirstName(data.first_name); })
+      .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleWizardComplete() {
     setShowWizard(false);
     setOnboarding(prev => prev ? { ...prev, onboarding_completed: true } : prev);
-    // Refresh summary so completion_status updates
     apiFetch('/api/finance/summary')
       .then(res => res.ok ? res.json() : null)
       .then(data => data && setSummary(data))
@@ -169,6 +173,8 @@ export default function Dashboard() {
         <OnboardingWizard
           initialStep={onboarding?.current_onboarding_step ?? 0}
           dismissCount={onboarding?.onboarding_dismiss_count ?? 0}
+          firstName={firstName}
+          onFirstNameChange={setFirstName}
           onComplete={handleWizardComplete}
           onDismiss={handleWizardDismiss}
         />
@@ -177,7 +183,7 @@ export default function Dashboard() {
       <main className="dashboard">
         {!hasIncome ? (
           <div className="empty-state">
-            <h2>Welcome to FinanceApp</h2>
+            <h2>{firstName ? `Hi ${firstName}, welcome to fivera` : 'Welcome to fivera'}</h2>
             <p>
               You haven't added any income sources yet. Once you do, you'll see your full
               take-home breakdown, deductions, and monthly disposable income here.
@@ -188,6 +194,7 @@ export default function Dashboard() {
           </div>
         ) : (
           <>
+            {firstName && <p className="dashboard-greeting">Hi {firstName},</p>}
             {/* ── Hero: disposable income ── */}
             <div className="hero">
               <p className="hero-label">Monthly Disposable Income</p>
@@ -211,7 +218,7 @@ export default function Dashboard() {
                 <table className="breakdown">
                   <tbody>
                     <tr>
-                      <td>Savings</td>
+                      <td>Savings &amp; investments</td>
                       <td>
                         {gbp(total_savings_balance)}
                         <ChangeIndicator metric={period?.total_savings_balance} />

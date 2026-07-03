@@ -4,7 +4,7 @@ import { useResource } from '../hooks/useResource';
 
 const EMPTY = { current_balance: '', employee_contribution_pct: '', employer_contribution_pct: '' };
 
-const gbp = n => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
+import { gbp } from '../utils/format';
 
 export default function Pension() {
   const { items, loading, error, create, update, remove } = useResource('/api/pension');

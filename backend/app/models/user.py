@@ -20,6 +20,7 @@ class User(TimestampMixin, Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     country: Mapped[str] = mapped_column(String(10), default="UK", nullable=False)
 
+    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
     occupation: Mapped[str | None] = mapped_column(String(255), nullable=True)
     postcode_outward: Mapped[str | None] = mapped_column(String(10), nullable=True)

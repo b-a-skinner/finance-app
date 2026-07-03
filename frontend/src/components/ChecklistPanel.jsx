@@ -5,7 +5,7 @@ const ITEMS = [
   { key: 'income',   label: 'Income',   path: '/income' },
   { key: 'expenses', label: 'Expenses', path: '/expenses' },
   { key: 'debts',    label: 'Debts',    path: '/debts' },
-  { key: 'savings',  label: 'Savings',  path: '/savings' },
+  { key: 'savings',  label: 'Savings & Investments',  path: '/savings' },
   { key: 'pension',  label: 'Pension',  path: '/pension' },
   { key: 'assets',   label: 'Assets',   path: '/assets' },
 ];

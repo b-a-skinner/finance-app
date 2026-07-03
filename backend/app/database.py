@@ -1,15 +1,15 @@
+import os
 from typing import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./finance.db"
+url = os.getenv("DATABASE_URL", "sqlite:///./finance.db")
+if url.startswith("postgres://"):
+    url = url.replace("postgres://", "postgresql://", 1)
 
-# check_same_thread=False is SQLite-specific; required for FastAPI's threaded request handling
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-)
+connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
+engine = create_engine(url, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -18,7 +18,6 @@ class Base(DeclarativeBase):
 
 
 def get_db() -> Generator[Session, None, None]:
-    """FastAPI dependency — yields a session and guarantees it closes after the request."""
     db = SessionLocal()
     try:
         yield db

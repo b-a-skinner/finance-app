@@ -190,3 +190,83 @@ class TestProfileAPI:
         client.put(PROFILE, json={"occupation": "Alice's job"}, headers=alice_headers)
         bob_body = client.get(PROFILE, headers=bob_headers).json()
         assert bob_body["occupation"] is None
+
+    def test_first_name_null_for_new_user(self, client, db):
+        _register(client)
+        body = client.get(PROFILE, headers=_auth_header(client)).json()
+        assert body["first_name"] is None
+
+    def test_put_saves_first_name(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        resp = client.put(PROFILE, json={"first_name": "Ben"}, headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["first_name"] == "Ben"
+
+    def test_first_name_persists_on_get(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        client.put(PROFILE, json={"first_name": "Alice"}, headers=headers)
+        body = client.get(PROFILE, headers=headers).json()
+        assert body["first_name"] == "Alice"
+
+
+class TestProfilePatch:
+    def test_patch_saves_first_name(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        resp = client.patch(PROFILE, json={"first_name": "Sam"}, headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["first_name"] == "Sam"
+
+    def test_patch_partial_does_not_null_other_fields(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        client.patch(PROFILE, json={"occupation": "Engineer", "postcode_outward": "M1"}, headers=headers)
+        client.patch(PROFILE, json={"first_name": "Jo"}, headers=headers)
+        body = client.get(PROFILE, headers=headers).json()
+        assert body["first_name"] == "Jo"
+        assert body["occupation"] == "Engineer"
+        assert body["postcode_outward"] == "M1"
+
+    def test_patch_saves_date_of_birth(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        resp = client.patch(PROFILE, json={"date_of_birth": "1995-03-20"}, headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["date_of_birth"] == "1995-03-20"
+
+    def test_patch_saves_occupation(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        resp = client.patch(PROFILE, json={"occupation": "Software Engineer"}, headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["occupation"] == "Software Engineer"
+
+    def test_patch_saves_postcode(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        resp = client.patch(PROFILE, json={"postcode_outward": "SW1A"}, headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["postcode_outward"] == "SW1A"
+
+    def test_patch_all_four_fields(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        resp = client.patch(PROFILE, json={
+            "first_name": "Taylor",
+            "date_of_birth": "1998-07-04",
+            "occupation": "Teacher",
+            "postcode_outward": "EH1",
+        }, headers=headers)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["first_name"] == "Taylor"
+        assert body["date_of_birth"] == "1998-07-04"
+        assert body["occupation"] == "Teacher"
+        assert body["postcode_outward"] == "EH1"
+        assert body["region"] == "Scotland"
+
+    def test_patch_requires_auth(self, client, db):
+        resp = client.patch(PROFILE, json={"first_name": "X"})
+        assert resp.status_code == 401

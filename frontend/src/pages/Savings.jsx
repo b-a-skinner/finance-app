@@ -2,10 +2,22 @@ import { useEffect, useState } from 'react';
 import NavBar from '../components/NavBar';
 import { useAuth } from '../context/AuthContext';
 import { useResource } from '../hooks/useResource';
+import { gbp } from '../utils/format';
 
-const EMPTY = { name: '', current_balance: '', target_amount: '', monthly_contribution: '' };
+const EMPTY = { name: '', current_balance: '', target_amount: '', monthly_contribution: '', account_type: '' };
 
-const gbp = n => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
+const ACCOUNT_TYPE_OPTIONS = [
+  { value: 'cash_savings',       label: 'Cash savings' },
+  { value: 'stocks_shares_isa',  label: 'Stocks & Shares ISA' },
+  { value: 'lifetime_isa',       label: 'Lifetime ISA' },
+  { value: 'investment_account', label: 'Investment account' },
+  { value: 'trading_account',    label: 'Trading account' },
+  { value: 'other',              label: 'Other' },
+];
+
+const ACCOUNT_TYPE_LABEL = Object.fromEntries(ACCOUNT_TYPE_OPTIONS.map(o => [o.value, o.label]));
+
+const INVESTMENT_TYPES = new Set(['stocks_shares_isa', 'lifetime_isa', 'investment_account', 'trading_account']);
 
 function formatDuration(months) {
   const years = Math.floor(months / 12);
@@ -37,13 +49,21 @@ function ProgressBar({ current, target }) {
 }
 
 function ProjectionBlock({ item, projection, dateOfBirth }) {
+  if (INVESTMENT_TYPES.has(item.account_type)) {
+    return (
+      <p className="projection-prompt">
+        Projections aren't shown for investment accounts as returns vary with the market.
+      </p>
+    );
+  }
+
   const hasTarget = item.target_amount != null && item.target_amount > 0;
   if (!hasTarget) return null;
 
   if (item.current_balance >= item.target_amount) {
     return (
       <div className="projection-block projection-block--good">
-        <p className="projection-headline">You've already reached this goal 🎉</p>
+        <p className="projection-headline">You've already reached this target 🎉</p>
       </div>
     );
   }
@@ -51,7 +71,7 @@ function ProjectionBlock({ item, projection, dateOfBirth }) {
   if (item.monthly_contribution <= 0) {
     return (
       <p className="projection-prompt">
-        Add a monthly contribution to see when you'll reach this goal.
+        Add a monthly contribution to see when you'll reach your target.
       </p>
     );
   }
@@ -66,7 +86,7 @@ function ProjectionBlock({ item, projection, dateOfBirth }) {
     <div className="projection-block projection-block--neutral">
       <p className="projection-headline">
         At your current contribution of {gbp(item.monthly_contribution)}/month, you'll reach your
-        goal in <strong>{duration}</strong> — by <strong>{projection.projected_date}</strong>
+        target in <strong>{duration}</strong> — by <strong>{projection.projected_date}</strong>
         {age !== null ? ` (when you'll be ${age})` : ''}.
       </p>
     </div>
@@ -94,6 +114,7 @@ export default function Savings() {
   useEffect(() => {
     const eligible = items.filter(
       item =>
+        !INVESTMENT_TYPES.has(item.account_type) &&
         item.target_amount != null &&
         item.target_amount > 0 &&
         item.monthly_contribution > 0 &&
@@ -120,6 +141,7 @@ export default function Savings() {
       current_balance: item.current_balance,
       target_amount: item.target_amount ?? '',
       monthly_contribution: item.monthly_contribution,
+      account_type: item.account_type ?? '',
     });
     setFormError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -148,6 +170,7 @@ export default function Savings() {
       current_balance: current,
       target_amount: target,
       monthly_contribution: contrib,
+      account_type: form.account_type || null,
     };
     setSaving(true);
     try {
@@ -175,23 +198,36 @@ export default function Savings() {
     <>
       <NavBar />
       <main className="resource-page">
-        <h1 className="page-title">Savings Goals</h1>
+        <h1 className="page-title">Savings &amp; Investments</h1>
         {error && <div className="page-error">{error}</div>}
         {actionError && <div className="error-banner">{actionError}</div>}
         <div className="resource-layout">
 
           <div className="card resource-form-card">
-            <p className="card-title">{editingId ? 'Edit savings goal' : 'Add savings goal'}</p>
+            <p className="card-title">{editingId ? 'Edit account' : 'Add an account'}</p>
             {formError && <div className="error-banner">{formError}</div>}
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label htmlFor="sav-name">Goal name</label>
+                <label htmlFor="sav-type">Account type</label>
+                <select
+                  id="sav-type"
+                  value={form.account_type}
+                  onChange={e => field('account_type', e.target.value)}
+                >
+                  <option value="">Select type…</option>
+                  {ACCOUNT_TYPE_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="sav-name">Account name</label>
                 <input
                   id="sav-name"
                   type="text"
                   value={form.name}
                   onChange={e => field('name', e.target.value)}
-                  placeholder="e.g. Emergency fund, House deposit"
+                  placeholder="e.g. Emergency fund, Vanguard ISA"
                 />
               </div>
               <div className="form-group">
@@ -232,7 +268,7 @@ export default function Savings() {
               </div>
               <div className="form-actions">
                 <button type="submit" className="btn-primary" disabled={saving}>
-                  {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add savings goal'}
+                  {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add account'}
                 </button>
                 {editingId && (
                   <button type="button" className="btn-secondary" onClick={cancelEdit}>
@@ -244,11 +280,11 @@ export default function Savings() {
           </div>
 
           <div className="card resource-list-card">
-            <p className="card-title">Your savings goals</p>
+            <p className="card-title">Your savings &amp; investments</p>
             {loading ? (
               <p className="list-empty">Loading…</p>
             ) : items.length === 0 ? (
-              <p className="list-empty">No savings goals yet.</p>
+              <p className="list-empty">No savings or investment accounts added yet.</p>
             ) : (
               <ul className="item-list">
                 {items.map(item => {
@@ -259,7 +295,12 @@ export default function Savings() {
                   return (
                     <li key={item.id} className={`item-row item-row--savings${editingId === item.id ? ' item-row--editing' : ''}`}>
                       <div className="item-info">
-                        <span className="item-name">{item.name}</span>
+                        <span className="item-name">
+                          {item.name}
+                          {item.account_type && (
+                            <span className="badge badge-neutral">{ACCOUNT_TYPE_LABEL[item.account_type] ?? item.account_type}</span>
+                          )}
+                        </span>
                         <span className="item-detail">
                           {hasTarget
                             ? `${gbp(item.current_balance)} of ${gbp(item.target_amount)} · ${gbp(item.monthly_contribution)}/mo`

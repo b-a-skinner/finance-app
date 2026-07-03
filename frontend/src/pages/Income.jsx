@@ -6,7 +6,7 @@ import { useResource } from '../hooks/useResource';
 const EMPTY = { label: '', gross_annual_salary: '' };
 const PAY_LABEL = { annual: 'annually', monthly: 'monthly', weekly: 'weekly' };
 
-const gbp = n => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
+import { gbp } from '../utils/format';
 
 export default function Income() {
   const { items, loading, error, create, update, remove } = useResource('/api/income');

@@ -81,6 +81,7 @@ class SavingsGoal(TimestampMixin, Base):
     current_balance: Mapped[float] = mapped_column(Float, nullable=False)
     target_amount: Mapped[float] = mapped_column(Float, nullable=False)
     monthly_contribution: Mapped[float] = mapped_column(Float, nullable=False)
+    account_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="savings_goals")

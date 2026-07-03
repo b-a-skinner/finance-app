@@ -1,3 +1,6 @@
+import math
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -6,9 +9,14 @@ from app.models import Debt, IncomeSource
 from app.models.config import StudentLoanPlanConfig
 from app.models.user import User
 from app.routes.auth import get_current_user
-from app.schemas import DebtCreate, DebtOut, DebtUpdate, LoanProjectionOut
+from app.schemas import DebtCreate, DebtOut, DebtRepaymentProjectionOut, DebtUpdate, LoanProjectionOut
 from app.services.student_loan_projection import calculate_loan_projection
 from app.utils import get_owned_or_404
+
+_MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
 
 router = APIRouter(prefix="/debts", tags=["debts"])
 
@@ -96,3 +104,88 @@ def get_debt_projection(
         annual_salary=annual_salary,
     )
     return result
+
+
+def _projected_date_str(months: int) -> str:
+    today = date.today()
+    total = today.month - 1 + months
+    return f"{_MONTH_NAMES[total % 12]} {today.year + total // 12}"
+
+
+@router.get("/{item_id}/repayment-projection", response_model=DebtRepaymentProjectionOut)
+def get_debt_repayment_projection(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    debt = get_owned_or_404(db, Debt, item_id, current_user.id)
+
+    if debt.debt_type == "student_loan":
+        raise HTTPException(status_code=400, detail="Use /projection for student loan debts.")
+
+    balance = debt.balance
+    monthly_rate = (debt.interest_rate / 100) / 12
+    min_payment = debt.min_payment or 0.0
+
+    if balance <= 0:
+        return DebtRepaymentProjectionOut(
+            months_to_payoff=0,
+            projected_payoff_date=None,
+            total_interest_to_pay=0.0,
+            payment_covers_interest=True,
+            is_student_loan=False,
+        )
+
+    if min_payment <= 0:
+        return DebtRepaymentProjectionOut(
+            months_to_payoff=None,
+            projected_payoff_date=None,
+            total_interest_to_pay=None,
+            payment_covers_interest=True,
+            is_student_loan=False,
+        )
+
+    if debt.interest_rate > 0 and min_payment <= balance * monthly_rate:
+        return DebtRepaymentProjectionOut(
+            months_to_payoff=None,
+            projected_payoff_date=None,
+            total_interest_to_pay=None,
+            payment_covers_interest=False,
+            is_student_loan=False,
+        )
+
+    if debt.interest_rate == 0:
+        months = math.ceil(balance / min_payment)
+        return DebtRepaymentProjectionOut(
+            months_to_payoff=months,
+            projected_payoff_date=_projected_date_str(months),
+            total_interest_to_pay=0.0,
+            payment_covers_interest=True,
+            is_student_loan=False,
+        )
+
+    current = balance
+    total_interest = 0.0
+    months = 0
+    while current > 0 and months < 1200:
+        interest = current * monthly_rate
+        total_interest += interest
+        current = current + interest - min_payment
+        months += 1
+
+    if months >= 1200:
+        return DebtRepaymentProjectionOut(
+            months_to_payoff=None,
+            projected_payoff_date=None,
+            total_interest_to_pay=None,
+            payment_covers_interest=True,
+            is_student_loan=False,
+        )
+
+    return DebtRepaymentProjectionOut(
+        months_to_payoff=months,
+        projected_payoff_date=_projected_date_str(months),
+        total_interest_to_pay=round(total_interest, 2),
+        payment_covers_interest=True,
+        is_student_loan=False,
+    )

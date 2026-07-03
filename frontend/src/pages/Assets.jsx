@@ -10,7 +10,7 @@ const ASSET_TYPE_LABEL = {
   other: 'Other',
 };
 
-const gbp = n => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
+import { gbp } from '../utils/format';
 
 export default function Assets() {
   const { items, loading, error, create, update, remove } = useResource('/api/assets');

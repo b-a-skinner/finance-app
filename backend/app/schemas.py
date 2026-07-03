@@ -93,7 +93,7 @@ class DebtOut(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# LoanProjection
+# LoanProjection (student loan)
 # ---------------------------------------------------------------------------
 
 class LoanProjectionOut(BaseModel):
@@ -106,6 +106,14 @@ class LoanProjectionOut(BaseModel):
     annual_salary_assumption: float
 
 
+class DebtRepaymentProjectionOut(BaseModel):
+    months_to_payoff: int | None
+    projected_payoff_date: str | None
+    total_interest_to_pay: float | None
+    payment_covers_interest: bool
+    is_student_loan: bool
+
+
 # ---------------------------------------------------------------------------
 # SavingsGoal
 # ---------------------------------------------------------------------------
@@ -115,6 +123,7 @@ class SavingsCreate(BaseModel):
     current_balance: float
     target_amount: float | None = None
     monthly_contribution: float
+    account_type: str | None = None
 
 
 class SavingsUpdate(BaseModel):
@@ -122,6 +131,7 @@ class SavingsUpdate(BaseModel):
     current_balance: float | None = None
     target_amount: float | None = None
     monthly_contribution: float | None = None
+    account_type: str | None = None
 
 
 class SavingsOut(BaseModel):
@@ -131,6 +141,7 @@ class SavingsOut(BaseModel):
     current_balance: float
     target_amount: float | None
     monthly_contribution: float
+    account_type: str | None
     is_active: bool
 
     @field_validator('target_amount', mode='before')
@@ -201,6 +212,7 @@ class AssetOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 class ProfileUpdate(BaseModel):
+    first_name: str | None = None
     date_of_birth: date | None = None
     occupation: str | None = None
     postcode_outward: str | None = None
@@ -221,10 +233,23 @@ class ProfileUpdate(BaseModel):
 
 
 class ProfileOut(BaseModel):
+    first_name: str | None
     date_of_birth: date | None
     occupation: str | None
     postcode_outward: str | None
     region: str | None
+
+
+# ---------------------------------------------------------------------------
+# OccupationCode
+# ---------------------------------------------------------------------------
+
+class OccupationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    title: str
+    soc_code: str
+    soc_group: str
 
 
 # ---------------------------------------------------------------------------

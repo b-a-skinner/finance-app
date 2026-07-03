@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import NavBar from '../components/NavBar';
 import { useAuth } from '../context/AuthContext';
 import { useResource } from '../hooks/useResource';
+import { API_BASE } from '../utils/config';
 
 const EMPTY = {
   debt_type: 'credit_card',
@@ -19,14 +20,35 @@ const DEBT_TYPE_LABEL = {
   other: 'Other',
 };
 
-const gbp = n => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
+import { gbp } from '../utils/format';
 const pct = n => `${n}%`;
+
+function formatDuration(months) {
+  const years = Math.floor(months / 12);
+  const rem = months % 12;
+  if (years === 0) return `${months} ${months === 1 ? 'month' : 'months'}`;
+  if (rem === 0) return `${years} ${years === 1 ? 'year' : 'years'}`;
+  return `${years} ${years === 1 ? 'year' : 'years'}, ${rem} ${rem === 1 ? 'month' : 'months'}`;
+}
+
+function ageInMonths(dob, monthsFromNow) {
+  if (!dob) return null;
+  const today = new Date();
+  const target = new Date(today);
+  target.setMonth(target.getMonth() + monthsFromNow);
+  const birth = new Date(dob);
+  let age = target.getFullYear() - birth.getFullYear();
+  const m = target.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && target.getDate() < birth.getDate())) age--;
+  return age;
+}
 
 export default function Debts() {
   const { apiFetch } = useAuth();
   const { items, loading, error, create, update, remove } = useResource('/api/debts');
   const [loanPlans, setLoanPlans] = useState([]);
   const [projections, setProjections] = useState({});
+  const [repaymentProjections, setRepaymentProjections] = useState({});
   const [dob, setDob] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
@@ -35,7 +57,7 @@ export default function Debts() {
   const [actionError, setActionError] = useState('');
 
   useEffect(() => {
-    fetch('/api/config/student-loan-plans')
+    fetch(`${API_BASE}/api/config/student-loan-plans`)
       .then(r => r.json())
       .then(setLoanPlans)
       .catch(() => {});
@@ -49,7 +71,7 @@ export default function Debts() {
       .catch(() => {});
   }, [apiFetch]);
 
-  // Fetch projection for every student loan debt that has a graduation_year
+  // Fetch student loan projections
   useEffect(() => {
     const eligible = items.filter(
       d => d.debt_type === 'student_loan' && d.graduation_year
@@ -59,6 +81,21 @@ export default function Debts() {
         .then(r => r.ok ? r.json() : null)
         .then(data => {
           if (data) setProjections(prev => ({ ...prev, [debt.id]: data }));
+        })
+        .catch(() => {});
+    });
+  }, [items, apiFetch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch repayment projections for non-student-loan debts
+  useEffect(() => {
+    const eligible = items.filter(
+      d => d.debt_type !== 'student_loan' && d.balance > 0 && d.min_payment > 0
+    );
+    eligible.forEach(debt => {
+      apiFetch(`/api/debts/${debt.id}/repayment-projection`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data) setRepaymentProjections(prev => ({ ...prev, [debt.id]: data }));
         })
         .catch(() => {});
     });
@@ -133,7 +170,64 @@ export default function Debts() {
   async function handleDelete(id) {
     setActionError('');
     setProjections(prev => { const n = { ...prev }; delete n[id]; return n; });
+    setRepaymentProjections(prev => { const n = { ...prev }; delete n[id]; return n; });
     try { await remove(id); } catch (err) { setActionError(err.message); }
+  }
+
+  function DebtRepaymentProjectionBlock({ debt }) {
+    if (debt.debt_type === 'student_loan') return null;
+
+    if (debt.balance <= 0) {
+      return (
+        <div className="projection-block projection-block--good">
+          <p className="projection-headline">This debt is cleared 🎉</p>
+        </div>
+      );
+    }
+
+    if (!debt.min_payment || debt.min_payment <= 0) {
+      return (
+        <p className="projection-prompt">
+          Add a minimum payment amount to see your payoff projection.
+        </p>
+      );
+    }
+
+    const p = repaymentProjections[debt.id];
+    if (!p) return null;
+
+    if (!p.payment_covers_interest) {
+      const monthlyInterest = (debt.balance * (debt.interest_rate / 100)) / 12;
+      return (
+        <div className="projection-block projection-block--warn">
+          <p className="projection-headline">
+            ⚠️ Your current payment of {gbp(debt.min_payment)}/month doesn't cover the monthly
+            interest of {gbp(monthlyInterest)}. Your balance will increase over time — consider
+            increasing your payment.
+          </p>
+        </div>
+      );
+    }
+
+    if (p.months_to_payoff == null) return null;
+
+    const duration = formatDuration(p.months_to_payoff);
+    const age = ageInMonths(dob, p.months_to_payoff);
+
+    return (
+      <div className="projection-block projection-block--neutral">
+        <p className="projection-headline">
+          At your current payment of {gbp(debt.min_payment)}/month, you'll pay off this debt in{' '}
+          <strong>{duration}</strong> — by <strong>{p.projected_payoff_date}</strong>
+          {age !== null ? ` (when you'll be ${age})` : ''}.
+        </p>
+        {p.total_interest_to_pay != null && p.total_interest_to_pay > 0 && (
+          <p className="projection-note">
+            You'll pay {gbp(p.total_interest_to_pay)} in interest.
+          </p>
+        )}
+      </div>
+    );
   }
 
   function planName(id) {
@@ -161,9 +255,9 @@ export default function Debts() {
       return (
         <div className="projection-block projection-block--good">
           <p className="projection-headline">
-            On your current salary, you're projected to clear this loan around{' '}
+            Based on your current salary, you'll clear this loan around{' '}
             <strong>{payoffYear}</strong>
-            {age != null ? ` (age ${age})` : ''}.
+            {age != null ? ` (when you'll be ${age})` : ''}.
           </p>
           <p className="projection-assumption">
             Estimate assumes your current salary ({gbp(p.annual_salary_assumption)}/yr) stays the same
@@ -332,7 +426,8 @@ export default function Debts() {
                         )}
                       </span>
                       <span className="item-detail">
-                        {gbp(item.balance)} balance · {pct(item.interest_rate)} · {gbp(item.min_payment)}/mo minimum
+                        {gbp(item.balance)} balance · {pct(item.interest_rate)} ·{' '}
+                        {item.debt_type === 'student_loan' ? 'income-contingent' : `${gbp(item.min_payment)}/mo minimum`}
                       </span>
                     </div>
                     <div className="item-actions">
@@ -346,6 +441,9 @@ export default function Debts() {
                       <p className="projection-prompt">
                         Add your graduation year above to see a repayment projection.
                       </p>
+                    )}
+                    {item.debt_type !== 'student_loan' && (
+                      <DebtRepaymentProjectionBlock debt={item} />
                     )}
                   </li>
                 ))}
