@@ -12,85 +12,66 @@ function pctDiff(pct) {
 
 function SalaryAgeSlide({ cmp }) {
   return (
-    <div className="carousel-slide">
-      <p className="carousel-slide-text">
-        {cmp.user_age != null ? `You're ${cmp.user_age}. ` : ''}
-        People aged {cmp.salary_band_label} earn a median of <strong>{gbp(cmp.median_monthly_salary)}/month</strong>.
-        {' '}Your monthly income of <strong>{gbp(cmp.current_monthly_salary)}</strong> is{' '}
-        <strong>{pctDiff(cmp.salary_comparison_pct)}</strong> the typical figure for your age group.
-      </p>
+    <span className="carousel-slide-text">
+      {cmp.user_age ? `Age ${cmp.user_age} · ` : ''}
+      Median salary for {cmp.salary_band_label}: <strong>{gbp(cmp.median_monthly_salary)}/month</strong>
+      {' · '}Your income of <strong>{gbp(cmp.current_monthly_salary)}/month</strong> is{' '}
+      <strong>{pctDiff(cmp.salary_comparison_pct)}</strong> the typical figure
       {cmp.salary_source && (
-        <p className="benchmark-source">{cmp.salary_source} · {cmp.salary_source_metric}</p>
+        <span className="carousel-source"> · {cmp.salary_source}</span>
       )}
-    </div>
+    </span>
   );
 }
 
 function RegionalSlide({ cmp }) {
   return (
-    <div className="carousel-slide">
-      <p className="carousel-slide-text">
-        In <strong>{cmp.region}</strong>, the typical salary is{' '}
-        <strong>{gbp(cmp.median_annual_salary_for_region)}/year</strong>.
-        {' '}Your annual income of <strong>{gbp(cmp.current_annual_salary)}</strong> is{' '}
-        <strong>{pctDiff(cmp.salary_vs_region_pct)}</strong> the regional median.
-      </p>
-      {cmp.region_source && (
-        <p className="benchmark-source">{cmp.region_source}</p>
-      )}
+    <span className="carousel-slide-text">
+      In <strong>{cmp.region}</strong>: median salary is{' '}
+      <strong>{gbp(cmp.median_annual_salary_for_region)}/year</strong>
+      {' · '}Your <strong>{gbp(cmp.current_annual_salary)}/year</strong> is{' '}
+      <strong>{pctDiff(cmp.salary_vs_region_pct)}</strong> the regional median
+      {cmp.region_source && <span className="carousel-source"> · {cmp.region_source}</span>}
       {cmp.is_london && (
-        <p className="benchmark-source benchmark-caveat">
-          London figure is full-time employees only and may overstate the typical comparison.
-        </p>
+        <span className="carousel-source"> · London figure is full-time employees only</span>
       )}
-    </div>
+    </span>
   );
 }
 
 function PensionSlide({ cmp }) {
   if (!cmp.pension_data_available || !cmp.pension_band_label) {
     return (
-      <div className="carousel-slide">
-        <p className="carousel-slide-text benchmark-unavailable">
-          Benchmark data not yet available for the {cmp.pension_band_label ?? 'your'} age group.
-        </p>
-      </div>
+      <span className="carousel-slide-text carousel-text-muted">
+        Pension benchmark data not yet available for the {cmp.pension_band_label ?? 'your'} age group
+      </span>
     );
   }
   return (
-    <div className="carousel-slide">
-      <p className="carousel-slide-text">
-        People aged {cmp.pension_band_label} have a median pension pot of{' '}
-        <strong>{gbp(cmp.median_pension_pot)}</strong>.
-        {' '}Your current pot of <strong>{gbp(cmp.current_pension_pot)}</strong> is{' '}
-        <strong>{pctDiff(cmp.pension_comparison_pct)}</strong> this.
-      </p>
-      {cmp.pension_source && (
-        <p className="benchmark-source">{cmp.pension_source}</p>
-      )}
-    </div>
+    <span className="carousel-slide-text">
+      Median pension pot for age {cmp.pension_band_label}: <strong>{gbp(cmp.median_pension_pot)}</strong>
+      {' · '}Your pot of <strong>{gbp(cmp.current_pension_pot)}</strong> is{' '}
+      <strong>{pctDiff(cmp.pension_comparison_pct)}</strong> this
+      {cmp.pension_source && <span className="carousel-source"> · {cmp.pension_source}</span>}
+    </span>
   );
 }
 
 function DobPromptSlide() {
   return (
-    <div className="carousel-slide">
-      <p className="carousel-slide-text">
-        Add your date of birth to see how your salary and pension compare by age group.
-      </p>
-      <Link to="/profile" className="carousel-prompt-link">Update profile →</Link>
-    </div>
+    <span className="carousel-slide-text">
+      Add your date of birth to see how your salary compares by age —{' '}
+      <Link to="/profile" className="carousel-prompt-link">Update profile</Link>
+    </span>
   );
 }
 
 function PostcodePromptSlide() {
   return (
-    <div className="carousel-slide">
-      <p className="carousel-slide-text">
-        Add your postcode to see how your salary compares regionally.
-      </p>
-      <Link to="/profile" className="carousel-prompt-link">Update profile →</Link>
-    </div>
+    <span className="carousel-slide-text">
+      Add your postcode to see how your salary compares regionally —{' '}
+      <Link to="/profile" className="carousel-prompt-link">Update profile</Link>
+    </span>
   );
 }
 
@@ -147,38 +128,42 @@ export default function BenchmarkCarousel({ comparison, profile }) {
   }
 
   return (
-    <div className="carousel-section">
+    <div
+      className="carousel-banner"
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
       <p className="carousel-heading">HOW YOU COMPARE</p>
-      <div
-        className="card carousel-card"
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-      >
-        {slides.length > 1 && (
-          <button className="carousel-arrow carousel-arrow--left" onClick={prev} aria-label="Previous">‹</button>
+      <div className="carousel-banner-row">
+        {slides.length > 1 ? (
+          <button className="carousel-arrow" onClick={prev} aria-label="Previous">‹</button>
+        ) : (
+          <span className="carousel-arrow-spacer" />
         )}
 
-        <div className="carousel-body">
+        <div className="carousel-banner-center">
           {slides[clampedSlide]}
         </div>
 
-        {slides.length > 1 && (
-          <button className="carousel-arrow carousel-arrow--right" onClick={next} aria-label="Next">›</button>
-        )}
-
-        {slides.length > 1 && (
-          <div className="carousel-dots">
-            {slides.map((_, i) => (
-              <button
-                key={i}
-                className={`carousel-dot${i === clampedSlide ? ' carousel-dot--active' : ''}`}
-                onClick={() => setSlide(i)}
-                aria-label={`Slide ${i + 1}`}
-              />
-            ))}
-          </div>
+        {slides.length > 1 ? (
+          <button className="carousel-arrow" onClick={next} aria-label="Next">›</button>
+        ) : (
+          <span className="carousel-arrow-spacer" />
         )}
       </div>
+
+      {slides.length > 1 && (
+        <div className="carousel-dots">
+          {slides.map((_, i) => (
+            <button
+              key={i}
+              className={`carousel-dot${i === clampedSlide ? ' carousel-dot--active' : ''}`}
+              onClick={() => setSlide(i)}
+              aria-label={`Slide ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

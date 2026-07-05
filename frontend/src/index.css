@@ -1837,85 +1837,83 @@ input[type="date"] {
   text-decoration: underline;
 }
 
-/* ── Benchmark carousel ───────────────────────────────────────────────────── */
+/* ── Benchmark carousel (compact banner) ──────────────────────────────────── */
 
-.carousel-section {
-  margin: 1.5rem 0;
+.carousel-banner {
+  margin: 0 0 1.25rem;
 }
 
 .carousel-heading {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   color: var(--color-text-muted);
   text-transform: uppercase;
-  margin: 0 0 0.5rem 0;
-}
-
-.carousel-card {
-  position: relative;
-  padding: 1.25rem 3rem;
-  min-height: 5rem;
-}
-
-.carousel-body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 4rem;
-}
-
-.carousel-slide {
-  width: 100%;
+  margin: 0 0 0.35rem 0;
   text-align: center;
 }
 
+.carousel-banner-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.carousel-banner-center {
+  flex: 1;
+  text-align: center;
+  line-height: 1.45;
+}
+
 .carousel-slide-text {
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   color: var(--color-text);
-  margin: 0 0 0.4rem 0;
-  line-height: 1.5;
+}
+
+.carousel-source {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.carousel-text-muted {
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
 .carousel-prompt-link {
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   color: var(--color-positive);
   text-decoration: none;
-  display: inline-block;
-  margin-top: 0.25rem;
 }
 
 .carousel-prompt-link:hover { text-decoration: underline; }
 
 .carousel-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  flex-shrink: 0;
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   color: var(--color-text-muted);
-  padding: 0.25rem 0.5rem;
+  padding: 0.2rem 0.3rem;
   line-height: 1;
   font-family: inherit;
 }
 
 .carousel-arrow:hover { color: var(--color-text); }
 
-.carousel-arrow--left  { left: 0.5rem; }
-.carousel-arrow--right { right: 0.5rem; }
+.carousel-arrow-spacer { width: 2rem; flex-shrink: 0; }
 
 .carousel-dots {
   display: flex;
   justify-content: center;
-  gap: 0.4rem;
-  margin-top: 0.75rem;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
 }
 
 .carousel-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--color-border);
   border: none;
@@ -1957,3 +1955,49 @@ input[type="date"] {
 }
 
 .register-skip a:hover { text-decoration: underline; }
+
+/* ── Net worth clickable zero rows ───────────────────────────────────────── */
+
+.nw-row-empty { cursor: pointer; }
+
+.nw-row-empty:hover td { background: rgba(26, 58, 92, 0.04); }
+
+.nw-row-arrow {
+  margin-left: 0.2rem;
+  font-size: 0.8rem;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.nw-row-empty:hover .nw-row-arrow { opacity: 1; }
+
+/* ── Password visibility toggle ──────────────────────────────────────────── */
+
+.password-wrap { position: relative; }
+
+.password-wrap input { padding-right: 2.75rem; }
+
+.password-toggle {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  padding: 0;
+  line-height: 1;
+}
+
+.password-toggle:hover { color: var(--color-text); }
+
+/* ── Emergency fund null prompt ──────────────────────────────────────────── */
+
+.runway-null-prompt {
+  font-size: 0.875rem;
+  color: var(--color-positive);
+  margin: 0.5rem 0 0;
+}

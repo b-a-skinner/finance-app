@@ -28,7 +28,7 @@ const STEP_TITLES = {
 const STEP_DESCRIPTIONS = {
   about_you: 'Tell us a bit about yourself — date of birth, occupation, and location. Full profile setup is coming soon.',
   goals:     "Tell us what you're working towards — retiring early, buying a home, building an emergency fund — anything. This helps personalise your dashboard.",
-  income:    "Enter your salary so we can calculate take-home pay, tax, and National Insurance. You can add multiple income sources.",
+  income:    "Add any additional income sources — your main salary has already been set up from registration.",
   expenses:  "Add your regular monthly outgoings (rent, bills, subscriptions) so we can calculate how much you have left each month.",
   debts:     "Add any outstanding debts — credit cards, student loans, mortgages — to include them in your net worth.",
   savings:   "Add your cash savings, ISAs, investment accounts, and trading accounts to get a complete picture of your wealth.",
@@ -386,8 +386,8 @@ function IncomeStep({ onNext, onBack }) {
       </form>
       <div className="wizard-step-actions">
         <button className="btn-secondary" onClick={onBack}>Back</button>
-        <button className="btn-primary" onClick={onNext} disabled={existing.length === 0}>Continue</button>
-        {existing.length === 0 && <span className="wizard-required-hint">Add at least one income source to continue</span>}
+        <button className="btn-primary" onClick={onNext}>Continue</button>
+        <button className="btn-secondary" onClick={onNext}>Skip</button>
       </div>
     </div>
   );
@@ -916,6 +916,7 @@ export default function OnboardingWizard({ initialStep, dismissCount, firstName:
           </div>
         ) : (
           <>
+            <button className="wizard-close" onClick={handleDismiss} aria-label="Close wizard">×</button>
             <div className="wizard-header">
               <div className="wizard-progress">
                 {STEPS.map((_, i) => (

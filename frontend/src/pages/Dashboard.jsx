@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import InfoTip from '../components/InfoTip';
 import OnboardingWizard from '../components/OnboardingWizard';
@@ -25,10 +25,9 @@ function ChangeIndicator({ metric }) {
   const { direction, absolute_change, elapsed_days } = metric;
   if (direction === 'unchanged') return null;
   const arrow = direction === 'up' ? '↑' : '↓';
-  const sign  = absolute_change >= 0 ? '+' : '';
   return (
     <span className="change-indicator">
-      {arrow} {sign}{gbp(Math.abs(absolute_change))}
+      {arrow} {absolute_change >= 0 ? '+' : ''}{gbp(Math.abs(absolute_change))}
       <span className="change-indicator-period"> ({elapsed_days}d ago)</span>
     </span>
   );
@@ -42,23 +41,39 @@ function RunwayChangeIndicator({ metric }) {
   if (!label) return null;
   const warn = current_value < 3 && direction === 'down';
   const cls  = `change-indicator${warn ? ' change-indicator--warn' : ''}`;
-  const arrow = direction === 'up' ? '↑' : '↓';
   return (
     <span className={cls}>
-      {arrow} {label}
+      {direction === 'up' ? '↑' : '↓'} {label}
       <span className="change-indicator-period"> ({elapsed_days}d ago)</span>
     </span>
   );
 }
 
-function DashPrompt({ to, children }) {
+function NwRow({ label, to, value, displayValue, metric, className }) {
+  const navigate = useNavigate();
+  const isEmpty = value === 0;
   return (
-    <Link to={to} className="dash-prompt">{children}</Link>
+    <tr
+      className={`${className ?? ''} ${isEmpty ? 'nw-row-empty' : ''}`.trim()}
+      onClick={isEmpty ? () => navigate(to) : undefined}
+    >
+      <td>{label}</td>
+      <td>
+        {displayValue ?? gbp(value)}
+        {isEmpty && <span className="nw-row-arrow" aria-hidden="true"> →</span>}
+        {!isEmpty && metric && <ChangeIndicator metric={metric} />}
+      </td>
+    </tr>
   );
+}
+
+function DashPrompt({ to, children }) {
+  return <Link to={to} className="dash-prompt">{children}</Link>;
 }
 
 export default function Dashboard() {
   const { apiFetch } = useAuth();
+  const navigate = useNavigate();
   const [summary,     setSummary]     = useState(null);
   const [changes,     setChanges]     = useState(null);
   const [onboarding,  setOnboarding]  = useState(null);
@@ -141,13 +156,9 @@ export default function Dashboard() {
     months_of_runway,
   } = summary;
 
-  const hasIncome      = t.gross_annual > 0;
-  const totalOutgoings = monthly_expenses + monthly_debt_payments + monthly_savings_contributions;
-
-  const period      = changes?.weekly ?? changes?.monthly ?? null;
-  const periodLabel = period?.label ?? null;
-
-  const cs = summary?.completion_status ?? {};
+  const hasIncome = t.gross_annual > 0;
+  const period    = changes?.weekly ?? changes?.monthly ?? null;
+  const cs        = summary?.completion_status ?? {};
 
   function formatRunway(months) {
     const whole = Math.floor(months);
@@ -191,7 +202,10 @@ export default function Dashboard() {
         <main className="dashboard">
           {firstName && <p className="dashboard-greeting">Hi {firstName},</p>}
 
-          {/* ── Hero: disposable income — only meaningful with income ── */}
+          {/* ── Benchmark carousel — compact banner at top ── */}
+          <BenchmarkCarousel comparison={comparison} profile={profileData} />
+
+          {/* ── Hero: disposable income ── */}
           {hasIncome && (
             <div className="hero">
               <p className="hero-label">Monthly Disposable Income</p>
@@ -215,31 +229,31 @@ export default function Dashboard() {
               </p>
               <table className="breakdown">
                 <tbody>
-                  <tr>
-                    <td>Savings &amp; investments</td>
-                    <td>
-                      {gbp(total_savings_balance)}
-                      <ChangeIndicator metric={period?.total_savings_balance} />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Pension pot</td>
-                    <td>
-                      {gbp(pension_pot_balance)}
-                      <ChangeIndicator metric={period?.pension_pot_balance} />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Assets</td>
-                    <td>{gbp(total_assets_value)}</td>
-                  </tr>
-                  <tr className="row-muted">
-                    <td>Total debt</td>
-                    <td>
-                      −{gbp(total_debt_balance)}
-                      <ChangeIndicator metric={period?.total_debt_balance} />
-                    </td>
-                  </tr>
+                  <NwRow
+                    label="Savings & investments"
+                    to="/savings"
+                    value={total_savings_balance}
+                    metric={period?.total_savings_balance}
+                  />
+                  <NwRow
+                    label="Pension pot"
+                    to="/pension"
+                    value={pension_pot_balance}
+                    metric={period?.pension_pot_balance}
+                  />
+                  <NwRow
+                    label="Assets"
+                    to="/assets"
+                    value={total_assets_value}
+                  />
+                  <NwRow
+                    label="Total debt"
+                    to="/debts"
+                    value={total_debt_balance}
+                    displayValue={`−${gbp(total_debt_balance)}`}
+                    metric={period?.total_debt_balance}
+                    className="row-muted"
+                  />
                   <tr className="row-total">
                     <td>Net worth</td>
                     <td style={{ color: net_worth >= 0 ? '#0f766e' : 'var(--color-negative)' }}>
@@ -248,13 +262,7 @@ export default function Dashboard() {
                   </tr>
                 </tbody>
               </table>
-              {periodLabel && <p className="change-period-label">{periodLabel}</p>}
-              <div className="dash-prompts">
-                {!cs.savings  && <DashPrompt to="/savings">Add your savings accounts to track your wealth →</DashPrompt>}
-                {!cs.pension  && <DashPrompt to="/pension">Add your pension to see your retirement picture →</DashPrompt>}
-                {!cs.assets   && <DashPrompt to="/assets">Add property or vehicles to complete your net worth →</DashPrompt>}
-                {!cs.debts    && <DashPrompt to="/debts">Add any debts for a complete financial picture →</DashPrompt>}
-              </div>
+              {period?.label && <p className="change-period-label">{period.label}</p>}
             </div>
 
             {/* ── Income & deductions ── */}
@@ -350,21 +358,31 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* ── Benchmark carousel ── */}
-          <BenchmarkCarousel comparison={comparison} profile={profileData} />
-
           {/* ── Emergency fund runway ── */}
           {months_of_runway === null ? (
-            <div className="card runway-card runway-card--null">
-              <p className="card-title"><span className="label-with-tip">Emergency Fund Coverage<InfoTip text="How many months you could cover your essential expenses using your current savings if your income stopped. 3–6 months is generally considered a healthy buffer." /></span></p>
-              <div className="dash-prompts">
-                {!cs.savings && <DashPrompt to="/savings">Add your savings to calculate your financial runway →</DashPrompt>}
-                {cs.savings && <DashPrompt to="/expenses">Add your monthly expenses to see your financial runway →</DashPrompt>}
-              </div>
+            <div
+              className="card runway-card runway-card--null"
+              style={total_savings_balance === 0 ? { cursor: 'pointer' } : undefined}
+              onClick={total_savings_balance === 0 ? () => navigate('/savings') : undefined}
+            >
+              <p className="card-title">
+                <span className="label-with-tip">Emergency Fund Coverage<InfoTip text="How many months you could cover your essential expenses using your current savings if your income stopped. 3–6 months is generally considered a healthy buffer." /></span>
+              </p>
+              {total_savings_balance === 0 ? (
+                <p className="runway-null-prompt">
+                  Add your savings to calculate your financial runway →
+                </p>
+              ) : (
+                <div className="dash-prompts">
+                  <DashPrompt to="/expenses">Add your monthly expenses to see your financial runway →</DashPrompt>
+                </div>
+              )}
             </div>
           ) : (
             <div className={`card runway-card ${runwayTier(months_of_runway)}`}>
-              <p className="card-title"><span className="label-with-tip">Emergency Fund Coverage<InfoTip text="How many months you could cover your essential expenses using your current savings if your income stopped. 3–6 months is generally considered a healthy buffer." /></span></p>
+              <p className="card-title">
+                <span className="label-with-tip">Emergency Fund Coverage<InfoTip text="How many months you could cover your essential expenses using your current savings if your income stopped. 3–6 months is generally considered a healthy buffer." /></span>
+              </p>
               <div className="runway-header">
                 <span className={`runway-months ${runwayTier(months_of_runway)}`}>
                   {formatRunway(months_of_runway)}
@@ -377,11 +395,6 @@ export default function Dashboard() {
                 {monthly_debt_payments > 0 && ` (includes ${gbp(monthly_debt_payments)} debt payments)`}
               </p>
               <p className="runway-context">{runwayContext(months_of_runway)}</p>
-              {total_savings_balance === 0 && cs.expenses && (
-                <div className="dash-prompts" style={{ marginTop: '0.5rem' }}>
-                  <DashPrompt to="/savings">Add your savings to calculate your financial runway →</DashPrompt>
-                </div>
-              )}
             </div>
           )}
         </main>
