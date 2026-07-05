@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import NavBar from '../components/NavBar';
 import { useAuth } from '../context/AuthContext';
 import { gbp } from '../utils/format';
@@ -149,6 +149,67 @@ function HowYouCompare({ cmp, dobSet, postcodeSet }) {
   );
 }
 
+function DobInput({ day, month, year, onChange }) {
+  const mmRef   = useRef(null);
+  const yyyyRef = useRef(null);
+
+  function handleDay(e) {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 2);
+    onChange(val, month, year);
+    if (val.length === 2) mmRef.current?.focus();
+  }
+
+  function handleMonth(e) {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 2);
+    onChange(day, val, year);
+    if (val.length === 2) yyyyRef.current?.focus();
+  }
+
+  function handleYear(e) {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+    onChange(day, month, val);
+  }
+
+  return (
+    <>
+      <div className="dob-row">
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={2}
+          className="dob-input dob-input-dd"
+          value={day}
+          onChange={handleDay}
+          placeholder="DD"
+        />
+        <span className="dob-sep">/</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={2}
+          ref={mmRef}
+          className="dob-input dob-input-mm"
+          value={month}
+          onChange={handleMonth}
+          placeholder="MM"
+        />
+        <span className="dob-sep">/</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={4}
+          ref={yyyyRef}
+          className="dob-input dob-input-yyyy"
+          value={year}
+          onChange={handleYear}
+          placeholder="YYYY"
+        />
+      </div>
+      <span className="form-hint">e.g. 23 / 01 / 2001</span>
+    </>
+  );
+}
+
 export default function Profile() {
   const { apiFetch } = useAuth();
   const [form, setForm] = useState(EMPTY);
@@ -258,8 +319,16 @@ export default function Profile() {
 
     const payload = {};
     const { dob_day, dob_month, dob_year } = form;
-    if (dob_day && dob_month && dob_year) {
-      payload.date_of_birth = `${dob_year.padStart(4, '0')}-${dob_month.padStart(2, '0')}-${dob_day.padStart(2, '0')}`;
+    const hasAnyDob = dob_day || dob_month || dob_year;
+    if (hasAnyDob) {
+      if (!dob_day || !dob_month || !dob_year) { setFormError('Please enter a complete date of birth.'); return; }
+      const d = parseInt(dob_day, 10);
+      const m = parseInt(dob_month, 10);
+      const y = parseInt(dob_year, 10);
+      if (isNaN(d) || d < 1 || d > 31)   { setFormError('Day must be between 1 and 31.'); return; }
+      if (isNaN(m) || m < 1 || m > 12)   { setFormError('Month must be between 1 and 12.'); return; }
+      if (isNaN(y) || y < 1900 || y > new Date().getFullYear()) { setFormError('Enter a valid 4-digit year.'); return; }
+      payload.date_of_birth = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     } else {
       payload.date_of_birth = null;
     }
@@ -322,33 +391,19 @@ export default function Profile() {
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>Date of birth</label>
-                <div className="wizard-dob-row">
-                  <input
-                    type="number" min="1" max="31"
-                    value={form.dob_day}
-                    onChange={e => field('dob_day', e.target.value)}
-                    placeholder="DD"
-                    className="wizard-dob-part wizard-dob-day"
-                  />
-                  <input
-                    type="number" min="1" max="12"
-                    value={form.dob_month}
-                    onChange={e => field('dob_month', e.target.value)}
-                    placeholder="MM"
-                    className="wizard-dob-part wizard-dob-month"
-                  />
-                  <input
-                    type="number" min="1900" max={new Date().getFullYear()}
-                    value={form.dob_year}
-                    onChange={e => field('dob_year', e.target.value)}
-                    placeholder="YYYY"
-                    className="wizard-dob-part wizard-dob-year"
-                  />
-                </div>
+                <DobInput
+                  day={form.dob_day}
+                  month={form.dob_month}
+                  year={form.dob_year}
+                  onChange={(d, m, y) => {
+                    setForm(p => ({ ...p, dob_day: d, dob_month: m, dob_year: y }));
+                    setSaved(false);
+                  }}
+                />
               </div>
-              <div className="form-group wizard-occ-group">
+              <div className="form-group occ-group">
                 <label htmlFor="occupation">Occupation</label>
-                <div className="wizard-occ-wrap">
+                <div className="occ-wrap">
                   <input
                     id="occupation"
                     type="text"
@@ -361,14 +416,14 @@ export default function Profile() {
                   />
                   {showOccDropdown && form.occupation.length >= 1 && (
                     Object.keys(groupedOccs).length > 0 ? (
-                      <ul className="wizard-occ-dropdown">
+                      <ul className="occ-dropdown">
                         {Object.entries(groupedOccs).map(([group, items]) => (
-                          <li key={group} className="wizard-occ-group-item">
-                            <div className="wizard-occ-group-header">{group}</div>
+                          <li key={group} className="occ-group-item">
+                            <div className="occ-group-header">{group}</div>
                             {items.map(occ => (
                               <div
                                 key={occ.id}
-                                className="wizard-occ-option"
+                                className="occ-option"
                                 onMouseDown={() => { field('occupation', occ.title); setShowOccDropdown(false); }}
                               >
                                 {occ.title}
@@ -378,10 +433,10 @@ export default function Profile() {
                         ))}
                       </ul>
                     ) : (
-                      <ul className="wizard-occ-dropdown">
-                        <li className="wizard-occ-group-item">
+                      <ul className="occ-dropdown">
+                        <li className="occ-group-item">
                           <div
-                            className="wizard-occ-option wizard-occ-option--freetext"
+                            className="occ-option occ-option--freetext"
                             onMouseDown={() => { field('occupation', form.occupation.trim()); setShowOccDropdown(false); }}
                           >
                             Use &ldquo;{form.occupation.trim()}&rdquo; as my occupation →

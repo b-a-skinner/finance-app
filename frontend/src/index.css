@@ -1726,6 +1726,94 @@ button.checklist-link {
   text-decoration: underline;
 }
 
+/* ── Date of birth inline input ──────────────────────────────────────────── */
+
+.dob-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.dob-input {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  padding: 0.5rem;
+  text-align: center;
+}
+
+.dob-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.dob-input-dd,
+.dob-input-mm { width: 58px; }
+
+.dob-input-yyyy { width: 80px; }
+
+.dob-sep {
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  user-select: none;
+}
+
+/* ── Occupation combobox ─────────────────────────────────────────────────── */
+
+.occ-group { position: relative; }
+
+.occ-wrap { position: relative; }
+
+.occ-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  max-height: 220px;
+  overflow-y: auto;
+  list-style: none;
+  padding: 0;
+  margin: 2px 0 0;
+}
+
+.occ-group-item { list-style: none; }
+
+.occ-group-header {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  position: sticky;
+  top: 0;
+}
+
+.occ-option {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: var(--color-text);
+}
+
+.occ-option:hover {
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+  color: var(--color-primary);
+}
+
+.occ-option--freetext { font-style: italic; color: var(--color-text-muted); }
+
+.occ-option--freetext:hover { color: var(--color-primary); }
+
 /* ── Quick-add modals ─────────────────────────────────────────────────────── */
 
 .qa-overlay {
