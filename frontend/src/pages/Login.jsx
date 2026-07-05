@@ -40,6 +40,7 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
+        <p className="auth-wordmark">fivera</p>
         <h1>Welcome back</h1>
         <p className="auth-subtitle">Sign in to your account</p>
 

@@ -46,6 +46,7 @@ export default function Register() {
   return (
     <div className="auth-page">
       <div className="auth-card">
+        <p className="auth-wordmark">fivera</p>
         <h1>Create account</h1>
         <p className="auth-subtitle">Start tracking your finances</p>
 
