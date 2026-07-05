@@ -429,14 +429,15 @@ export default function Dashboard() {
 
           {/* ── Benchmark carousel — below emergency fund ── */}
           <BenchmarkCarousel comparison={comparison} profile={profileData} />
-        </main>
 
-        {completionStatus && (
-          <ChecklistPanel
-            status={completionStatus}
-            onOpenWizard={() => setShowWizard(true)}
-          />
-        )}
+          {/* ── Setup checklist ── */}
+          {completionStatus && (
+            <ChecklistPanel
+              status={completionStatus}
+              onOpenWizard={() => setShowWizard(true)}
+            />
+          )}
+        </main>
       </div>
     </>
   );

@@ -1060,28 +1060,15 @@ input[type="date"] {
   text-decoration: underline;
 }
 
-/* ── Dashboard layout (with checklist panel) ────────────────────────────── */
+/* ── Dashboard layout ────────────────────────────────────────────────────── */
 .dashboard-wrapper {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 2rem 1.25rem;
-}
-
-.dashboard-wrapper .dashboard {
-  flex: 1;
-  min-width: 0;
-  max-width: 880px;
-  margin: 0;
-  padding: 0;
+  /* passthrough — .dashboard is self-contained */
 }
 
 /* ── Checklist panel ─────────────────────────────────────────────────────── */
 .checklist-panel {
-  width: 180px;
-  flex-shrink: 0;
+  width: 100%;
+  margin-top: 1rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -1467,15 +1454,6 @@ input[type="date"] {
   line-height: 1.5;
 }
 
-@media (max-width: 700px) {
-  .dashboard-wrapper {
-    flex-direction: column;
-  }
-
-  .checklist-panel {
-    width: 100%;
-  }
-}
 
 /* ── Onboarding goals grid ───────────────────────────────────────────────── */
 .wizard-goals-grid {
@@ -1844,6 +1822,7 @@ input[type="date"] {
 /* ── Benchmark carousel (white card, two-line) ────────────────────────────── */
 
 .carousel-card {
+  margin-top: 1rem;
   margin-bottom: 0;
 }
 
