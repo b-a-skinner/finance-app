@@ -60,7 +60,7 @@ export default function Register() {
       await register(email, password);
       await login(email, password);
       await createInitialIncome(salary);
-      navigate('/dashboard', { replace: true });
+      navigate('/goals', { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {

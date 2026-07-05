@@ -1949,19 +1949,6 @@ input[type="date"] {
 .nw-row-link { cursor: pointer; }
 .nw-row-link:hover td { background: rgba(26, 58, 92, 0.04); }
 
-.nw-row-chevron {
-  margin-left: 0.3rem;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  opacity: 0;
-  transition: opacity 0.1s;
-}
-
-.nw-row-link:hover .nw-row-chevron { opacity: 1; }
-
-@media (max-width: 767px) {
-  .nw-row-chevron { opacity: 0.45; }
-}
 
 /* Dashed add-button row */
 .nw-row-add td { padding-top: 0.35rem; padding-bottom: 0.35rem; }
@@ -2015,4 +2002,69 @@ input[type="date"] {
   font-size: 0.875rem;
   color: var(--color-positive);
   margin: 0.5rem 0 0;
+}
+
+/* ── Goals onboarding page ───────────────────────────────────────────────── */
+
+.goals-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.25rem;
+}
+
+.goals-page-heading {
+  font-size: 1.65rem;
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 0.6rem;
+  max-width: 520px;
+  line-height: 1.25;
+}
+
+.goals-page-sub {
+  color: var(--color-text-muted);
+  font-size: 0.925rem;
+  text-align: center;
+  margin: 0 0 1.75rem;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.goals-page-grid {
+  width: 100%;
+  max-width: 480px;
+}
+
+.goals-page-actions {
+  width: 100%;
+  max-width: 480px;
+  margin-top: 1.25rem;
+}
+
+.goals-page-btn {
+  display: block;
+  width: 100%;
+}
+
+.goals-page-skip {
+  text-align: center;
+  margin: 0.85rem 0 0;
+}
+
+.goals-page-skip button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  padding: 0;
+}
+
+.goals-page-skip button:hover {
+  color: var(--color-text);
+  text-decoration: underline;
 }

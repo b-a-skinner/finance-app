@@ -74,7 +74,6 @@ function NwRow({ label, addLabel, to, value, displayValue, metric, className }) 
       <td>
         {displayValue ?? gbp(value)}
         {metric && <ChangeIndicator metric={metric} />}
-        <span className="nw-row-chevron" aria-hidden="true">›</span>
       </td>
     </tr>
   );
@@ -353,7 +352,7 @@ export default function Dashboard() {
                     <td>{gbp(t.net_monthly)}</td>
                   </tr>
                   {monthly_expenses > 0 ? (
-                    <tr className="row-muted">
+                    <tr className="nw-row-link row-muted" onClick={() => navigate('/expenses')}>
                       <td>Expenses</td>
                       <td>−{gbp(monthly_expenses)}</td>
                     </tr>
@@ -361,7 +360,7 @@ export default function Dashboard() {
                     <OutgoingsAddRow addLabel="Add expenses" to="/expenses" />
                   )}
                   {monthly_debt_payments > 0 ? (
-                    <tr className="row-muted">
+                    <tr className="nw-row-link row-muted" onClick={() => navigate('/debts')}>
                       <td>Debt payments</td>
                       <td>−{gbp(monthly_debt_payments)}</td>
                     </tr>

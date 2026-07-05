@@ -11,6 +11,7 @@ import Pension from './pages/Pension';
 import Register from './pages/Register';
 import Savings from './pages/Savings';
 import Admin from './pages/Admin';
+import GoalsOnboarding from './pages/GoalsOnboarding';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/savings" element={<P><Savings /></P>} />
           <Route path="/pension" element={<P><Pension /></P>} />
           <Route path="/profile" element={<P><Profile /></P>} />
+          <Route path="/goals" element={<P><GoalsOnboarding /></P>} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
