@@ -85,6 +85,71 @@ body {
 @media (max-width: 767px) { .nav-label-desktop { display: none; } }
 @media (min-width: 768px) { .nav-label-mobile  { display: none; } }
 
+/* ── Hamburger (mobile only) ──────────────────────────────── */
+.navbar-hamburger {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .navbar-links {
+    display: none;
+  }
+
+  .navbar-hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.5rem 0.25rem;
+  }
+
+  .navbar-mobile-menu {
+    position: absolute;
+    top: 56px;
+    left: 0;
+    right: 0;
+    background: var(--color-primary);
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    z-index: 9;
+  }
+
+  .navbar-mobile-menu a,
+  .navbar-mobile-menu button {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 1.5rem;
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: none;
+    font-size: 0.95rem;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .navbar-mobile-menu a:hover,
+  .navbar-mobile-menu button:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+
+  .navbar-mobile-menu button {
+    color: rgba(255, 255, 255, 0.65);
+  }
+}
+
 /* ── Auth pages ───────────────────────────────────────────── */
 .auth-page {
   min-height: 100vh;
