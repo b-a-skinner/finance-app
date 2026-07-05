@@ -1815,3 +1815,145 @@ input[type="date"] {
 }
 
 .adm-delete-btn:hover { background: #fee2e2; }
+
+/* ── Dashboard empty-state prompts ────────────────────────────────────────── */
+
+.dash-prompts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+}
+
+.dash-prompt {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--color-positive);
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.dash-prompt:hover {
+  text-decoration: underline;
+}
+
+/* ── Benchmark carousel ───────────────────────────────────────────────────── */
+
+.carousel-section {
+  margin: 1.5rem 0;
+}
+
+.carousel-heading {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  margin: 0 0 0.5rem 0;
+}
+
+.carousel-card {
+  position: relative;
+  padding: 1.25rem 3rem;
+  min-height: 5rem;
+}
+
+.carousel-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 4rem;
+}
+
+.carousel-slide {
+  width: 100%;
+  text-align: center;
+}
+
+.carousel-slide-text {
+  font-size: 0.95rem;
+  color: var(--color-text);
+  margin: 0 0 0.4rem 0;
+  line-height: 1.5;
+}
+
+.carousel-prompt-link {
+  font-size: 0.85rem;
+  color: var(--color-positive);
+  text-decoration: none;
+  display: inline-block;
+  margin-top: 0.25rem;
+}
+
+.carousel-prompt-link:hover { text-decoration: underline; }
+
+.carousel-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.5rem;
+  color: var(--color-text-muted);
+  padding: 0.25rem 0.5rem;
+  line-height: 1;
+  font-family: inherit;
+}
+
+.carousel-arrow:hover { color: var(--color-text); }
+
+.carousel-arrow--left  { left: 0.5rem; }
+.carousel-arrow--right { right: 0.5rem; }
+
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+.carousel-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-border);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.carousel-dot--active { background: var(--color-text-muted); }
+
+/* ── Checklist wizard link ────────────────────────────────────────────────── */
+
+.checklist-wizard-link {
+  padding: 0.5rem 1rem 0;
+}
+
+.checklist-guide-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--color-positive);
+  font-family: inherit;
+  padding: 0;
+}
+
+.checklist-guide-btn:hover { text-decoration: underline; }
+
+/* ── Register skip link ───────────────────────────────────────────────────── */
+
+.register-skip {
+  margin-top: 0.75rem;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.register-skip a {
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.register-skip a:hover { text-decoration: underline; }

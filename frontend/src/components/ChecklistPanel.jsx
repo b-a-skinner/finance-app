@@ -12,7 +12,7 @@ const ITEMS = [
 
 const STORAGE_KEY = 'checklist_collapsed';
 
-export default function ChecklistPanel({ status }) {
+export default function ChecklistPanel({ status, onOpenWizard }) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch { return false; }
   });
@@ -36,18 +36,27 @@ export default function ChecklistPanel({ status }) {
         <span className="checklist-chevron">{collapsed ? '›' : '‹'}</span>
       </button>
       {!collapsed && (
-        <ul className="checklist-list">
-          {ITEMS.map(({ key, label, path }) => (
-            <li key={key} className={`checklist-item${status[key] ? ' checklist-item--done' : ''}`}>
-              <span className="checklist-tick">{status[key] ? '✓' : '○'}</span>
-              {status[key] ? (
-                <span className="checklist-label">{label}</span>
-              ) : (
-                <Link to={path} className="checklist-link">{label}</Link>
-              )}
-            </li>
-          ))}
-        </ul>
+        <>
+          {onOpenWizard && (
+            <div className="checklist-wizard-link">
+              <button className="checklist-guide-btn" onClick={onOpenWizard}>
+                Quick setup guide →
+              </button>
+            </div>
+          )}
+          <ul className="checklist-list">
+            {ITEMS.map(({ key, label, path }) => (
+              <li key={key} className={`checklist-item${status[key] ? ' checklist-item--done' : ''}`}>
+                <span className="checklist-tick">{status[key] ? '✓' : '○'}</span>
+                {status[key] ? (
+                  <span className="checklist-label">{label}</span>
+                ) : (
+                  <Link to={path} className="checklist-link">{label}</Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </aside>
   );
