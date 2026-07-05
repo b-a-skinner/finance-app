@@ -546,11 +546,6 @@ function DebtsStep({ onNext, onBack }) {
                 ))}
               </select>
             </div>
-            <p className="projection-link">
-              <a href="https://www.gov.uk/sign-in-to-manage-your-student-loan-balance" target="_blank" rel="noopener noreferrer">
-                Sign in to view your student loan balance on <span style={{ whiteSpace: 'nowrap' }}>gov.uk →</span>
-              </a>
-            </p>
             <div className="form-group">
               <label>Year you graduated (or left university)</label>
               <input
@@ -567,6 +562,13 @@ function DebtsStep({ onNext, onBack }) {
               </span>
             </div>
           </>
+        )}
+        {form.debt_type === 'student_loan' && (
+          <p className="projection-link">
+            <a href="https://www.gov.uk/sign-in-to-manage-your-student-loan-balance" target="_blank" rel="noopener noreferrer">
+              Sign in to view your student loan balance on <span style={{ whiteSpace: 'nowrap' }}>gov.uk →</span>
+            </a>
+          </p>
         )}
         <div className="form-group">
           <label>Outstanding balance (£)</label>

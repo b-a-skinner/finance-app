@@ -333,11 +333,6 @@ export default function Debts() {
                       ))}
                     </select>
                   </div>
-                  <p className="projection-link">
-                    <a href="https://www.gov.uk/sign-in-to-manage-your-student-loan-balance" target="_blank" rel="noopener noreferrer">
-                      Sign in to view your student loan balance on <span style={{ whiteSpace: 'nowrap' }}>gov.uk →</span>
-                    </a>
-                  </p>
                   <div className="form-group">
                     <label htmlFor="debt-grad-year">Year you graduated (or left university)</label>
                     <input
@@ -355,6 +350,13 @@ export default function Debts() {
                     </span>
                   </div>
                 </>
+              )}
+              {form.debt_type === 'student_loan' && (
+                <p className="projection-link">
+                  <a href="https://www.gov.uk/sign-in-to-manage-your-student-loan-balance" target="_blank" rel="noopener noreferrer">
+                    Sign in to view your student loan balance on <span style={{ whiteSpace: 'nowrap' }}>gov.uk →</span>
+                  </a>
+                </p>
               )}
               <div className="form-group">
                 <label htmlFor="debt-balance">Outstanding balance (£)</label>

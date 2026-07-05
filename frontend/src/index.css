@@ -567,6 +567,9 @@ body {
     border-color: var(--color-primary);
     color: var(--color-primary);
   }
+  .resource-form-card:not(.resource-form-card--closed) .resource-mobile-add-btn {
+    display: none;
+  }
 }
 
 @media (min-width: 768px) {
