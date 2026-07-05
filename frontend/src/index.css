@@ -1964,20 +1964,48 @@ input[type="date"] {
 
 .register-skip a:hover { text-decoration: underline; }
 
-/* ── Net worth clickable zero rows ───────────────────────────────────────── */
+/* ── Net worth / outgoings interactive rows ──────────────────────────────── */
 
-.nw-row-empty { cursor: pointer; }
+/* Clickable non-zero row */
+.nw-row-link { cursor: pointer; }
+.nw-row-link:hover td { background: rgba(26, 58, 92, 0.04); }
 
-.nw-row-empty:hover td { background: rgba(26, 58, 92, 0.04); }
-
-.nw-row-arrow {
-  margin-left: 0.2rem;
-  font-size: 0.8rem;
+.nw-row-chevron {
+  margin-left: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
   opacity: 0;
   transition: opacity 0.1s;
 }
 
-.nw-row-empty:hover .nw-row-arrow { opacity: 1; }
+.nw-row-link:hover .nw-row-chevron { opacity: 1; }
+
+@media (max-width: 767px) {
+  .nw-row-chevron { opacity: 0.45; }
+}
+
+/* Dashed add-button row */
+.nw-row-add td { padding-top: 0.35rem; padding-bottom: 0.35rem; }
+
+.nw-add-btn {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  border: 1.5px dashed var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.nw-add-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
 
 /* ── Password visibility toggle ──────────────────────────────────────────── */
 

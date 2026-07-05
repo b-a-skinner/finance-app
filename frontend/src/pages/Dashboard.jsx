@@ -49,19 +49,46 @@ function RunwayChangeIndicator({ metric }) {
   );
 }
 
-function NwRow({ label, to, value, displayValue, metric, className }) {
+/* Row that is a dashed add button when value=0, or a clickable link row when non-zero */
+function NwRow({ label, addLabel, to, value, displayValue, metric, className }) {
   const navigate = useNavigate();
-  const isEmpty = value === 0;
+
+  if (value === 0) {
+    return (
+      <tr className="nw-row-add">
+        <td colSpan="2">
+          <button className="nw-add-btn" onClick={() => navigate(to)}>
+            + {addLabel}
+          </button>
+        </td>
+      </tr>
+    );
+  }
+
   return (
     <tr
-      className={`${className ?? ''} ${isEmpty ? 'nw-row-empty' : ''}`.trim()}
-      onClick={isEmpty ? () => navigate(to) : undefined}
+      className={`nw-row-link${className ? ` ${className}` : ''}`}
+      onClick={() => navigate(to)}
     >
       <td>{label}</td>
       <td>
         {displayValue ?? gbp(value)}
-        {isEmpty && <span className="nw-row-arrow" aria-hidden="true"> →</span>}
-        {!isEmpty && metric && <ChangeIndicator metric={metric} />}
+        {metric && <ChangeIndicator metric={metric} />}
+        <span className="nw-row-chevron" aria-hidden="true">›</span>
+      </td>
+    </tr>
+  );
+}
+
+/* Dashed add row for the Monthly Outgoings table */
+function OutgoingsAddRow({ addLabel, to }) {
+  const navigate = useNavigate();
+  return (
+    <tr className="nw-row-add">
+      <td colSpan="2">
+        <button className="nw-add-btn" onClick={() => navigate(to)}>
+          + {addLabel}
+        </button>
       </td>
     </tr>
   );
@@ -202,7 +229,7 @@ export default function Dashboard() {
         <main className="dashboard">
           {firstName && <p className="dashboard-greeting">Hi {firstName},</p>}
 
-          {/* ── Benchmark carousel — compact banner at top ── */}
+          {/* ── Benchmark carousel — white card at top ── */}
           <BenchmarkCarousel comparison={comparison} profile={profileData} />
 
           {/* ── Hero: disposable income ── */}
@@ -231,23 +258,27 @@ export default function Dashboard() {
                 <tbody>
                   <NwRow
                     label="Savings & investments"
+                    addLabel="Add savings & investments"
                     to="/savings"
                     value={total_savings_balance}
                     metric={period?.total_savings_balance}
                   />
                   <NwRow
                     label="Pension pot"
+                    addLabel="Add pension"
                     to="/pension"
                     value={pension_pot_balance}
                     metric={period?.pension_pot_balance}
                   />
                   <NwRow
                     label="Assets"
+                    addLabel="Add assets"
                     to="/assets"
                     value={total_assets_value}
                   />
                   <NwRow
                     label="Total debt"
+                    addLabel="Add debts"
                     to="/debts"
                     value={total_debt_balance}
                     displayValue={`−${gbp(total_debt_balance)}`}
@@ -324,23 +355,29 @@ export default function Dashboard() {
                     <td>Net monthly <span className="label-with-tip">income<InfoTip text="What actually lands in your bank account each month after all deductions have been taken off." /></span></td>
                     <td>{gbp(t.net_monthly)}</td>
                   </tr>
-                  {monthly_expenses > 0 && (
+                  {monthly_expenses > 0 ? (
                     <tr className="row-muted">
                       <td>Expenses</td>
                       <td>−{gbp(monthly_expenses)}</td>
                     </tr>
+                  ) : (
+                    <OutgoingsAddRow addLabel="Add expenses" to="/expenses" />
                   )}
-                  {monthly_debt_payments > 0 && (
+                  {monthly_debt_payments > 0 ? (
                     <tr className="row-muted">
                       <td>Debt payments</td>
                       <td>−{gbp(monthly_debt_payments)}</td>
                     </tr>
+                  ) : (
+                    <OutgoingsAddRow addLabel="Add debts" to="/debts" />
                   )}
-                  {monthly_savings_contributions > 0 && (
+                  {monthly_savings_contributions > 0 ? (
                     <tr className="row-muted">
                       <td>Savings contributions</td>
                       <td>−{gbp(monthly_savings_contributions)}</td>
                     </tr>
+                  ) : (
+                    <OutgoingsAddRow addLabel="Add savings" to="/savings" />
                   )}
                   <tr className="row-total">
                     <td>Disposable income</td>
@@ -350,11 +387,6 @@ export default function Dashboard() {
                   </tr>
                 </tbody>
               </table>
-              {!cs.expenses && (
-                <div className="dash-prompts">
-                  <DashPrompt to="/expenses">Add your regular expenses to see your monthly outgoings →</DashPrompt>
-                </div>
-              )}
             </div>
           </div>
 
