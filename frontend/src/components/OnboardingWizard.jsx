@@ -726,14 +726,13 @@ function PensionStep({ onNext, onBack }) {
       if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.detail || 'Failed'); }
       const newItem = await res.json();
       setExisting(prev => [...prev, newItem]);
+      setForm({ current_balance: '', employee_contribution_pct: '', employer_contribution_pct: '' });
     } catch (err) {
       setError(err.message);
     } finally {
       setSaving(false);
     }
   }
-
-  const hasPension = existing.length > 0;
 
   return (
     <div className="wizard-step-body">
@@ -745,27 +744,25 @@ function PensionStep({ onNext, onBack }) {
         })}
       />
       {error && <p className="wizard-error">{error}</p>}
-      {!hasPension && (
-        <form onSubmit={handleAdd} className="wizard-form">
-          <div className="form-group">
-            <label>Current pension balance (£)</label>
-            <input type="number" min="0" step="0.01" value={form.current_balance} onChange={e => setForm(p => ({ ...p, current_balance: e.target.value }))} placeholder="e.g. 15000" />
-          </div>
-          <div className="form-group">
-            <label>Your contribution (%)</label>
-            <input type="number" min="0" step="0.1" value={form.employee_contribution_pct} onChange={e => setForm(p => ({ ...p, employee_contribution_pct: e.target.value }))} placeholder="e.g. 5" />
-          </div>
-          <div className="form-group">
-            <label>Employer contribution (%)</label>
-            <input type="number" min="0" step="0.1" value={form.employer_contribution_pct} onChange={e => setForm(p => ({ ...p, employer_contribution_pct: e.target.value }))} placeholder="e.g. 3" />
-          </div>
-          <button type="submit" className="btn-secondary" disabled={saving}>{saving ? 'Adding…' : 'Add pension'}</button>
-        </form>
-      )}
+      <form onSubmit={handleAdd} className="wizard-form">
+        <div className="form-group">
+          <label>Current pension balance (£)</label>
+          <input type="number" min="0" step="0.01" value={form.current_balance} onChange={e => setForm(p => ({ ...p, current_balance: e.target.value }))} placeholder="e.g. 15000" />
+        </div>
+        <div className="form-group">
+          <label>Your contribution (%)</label>
+          <input type="number" min="0" step="0.1" value={form.employee_contribution_pct} onChange={e => setForm(p => ({ ...p, employee_contribution_pct: e.target.value }))} placeholder="e.g. 5" />
+        </div>
+        <div className="form-group">
+          <label>Employer contribution (%)</label>
+          <input type="number" min="0" step="0.1" value={form.employer_contribution_pct} onChange={e => setForm(p => ({ ...p, employer_contribution_pct: e.target.value }))} placeholder="e.g. 3" />
+        </div>
+        <button type="submit" className="btn-secondary" disabled={saving}>{saving ? 'Adding…' : 'Add pension'}</button>
+      </form>
       <div className="wizard-step-actions">
         <button className="btn-secondary" onClick={onBack}>Back</button>
         <button className="btn-primary" onClick={onNext}>Continue</button>
-        {!hasPension && <button className="btn-ghost" onClick={onNext}>Skip</button>}
+        {existing.length === 0 && <button className="btn-ghost" onClick={onNext}>Skip</button>}
       </div>
     </div>
   );
