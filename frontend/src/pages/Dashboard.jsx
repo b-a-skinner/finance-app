@@ -1,12 +1,20 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import InfoTip from '../components/InfoTip';
-import OnboardingWizard from '../components/OnboardingWizard';
 import ChecklistPanel from '../components/ChecklistPanel';
 import BenchmarkCarousel from '../components/BenchmarkCarousel';
+import QuickAddModal from '../components/QuickAddModal';
 import { useAuth } from '../context/AuthContext';
 import { gbp } from '../utils/format';
+
+const CHECKLIST_MODAL_MAP = {
+  expenses: 'expense',
+  debts:    'debt',
+  savings:  'savings',
+  pension:  'pension',
+  assets:   'asset',
+};
 
 function formatMonthDelta(monthDelta) {
   const totalDays = Math.round(Math.abs(monthDelta) * 30.44);
@@ -49,15 +57,14 @@ function RunwayChangeIndicator({ metric }) {
   );
 }
 
-/* Row that is a dashed add button when value=0, or a clickable link row when non-zero */
-function NwRow({ label, addLabel, to, value, displayValue, metric, className }) {
+function NwRow({ label, addLabel, to, value, displayValue, metric, className, onAdd }) {
   const navigate = useNavigate();
 
   if (value === 0) {
     return (
       <tr className="nw-row-add">
         <td colSpan="2">
-          <button className="nw-add-btn" onClick={() => navigate(to)}>
+          <button className="nw-add-btn" onClick={onAdd ?? (() => navigate(to))}>
             + {addLabel}
           </button>
         </td>
@@ -79,13 +86,11 @@ function NwRow({ label, addLabel, to, value, displayValue, metric, className }) 
   );
 }
 
-/* Dashed add row for the Monthly Outgoings table */
-function OutgoingsAddRow({ addLabel, to }) {
-  const navigate = useNavigate();
+function OutgoingsAddRow({ addLabel, onAdd }) {
   return (
     <tr className="nw-row-add">
       <td colSpan="2">
-        <button className="nw-add-btn" onClick={() => navigate(to)}>
+        <button className="nw-add-btn" onClick={onAdd}>
           + {addLabel}
         </button>
       </td>
@@ -94,7 +99,10 @@ function OutgoingsAddRow({ addLabel, to }) {
 }
 
 function DashPrompt({ to, children }) {
-  return <Link to={to} className="dash-prompt">{children}</Link>;
+  const navigate = useNavigate();
+  return (
+    <button className="dash-prompt" onClick={() => navigate(to)}>{children}</button>
+  );
 }
 
 export default function Dashboard() {
@@ -102,14 +110,13 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [summary,     setSummary]     = useState(null);
   const [changes,     setChanges]     = useState(null);
-  const [onboarding,  setOnboarding]  = useState(null);
-  const [showWizard,  setShowWizard]  = useState(false);
   const [firstName,   setFirstName]   = useState('');
   const [profileData, setProfileData] = useState(null);
   const [comparison,  setComparison]  = useState(null);
+  const [activeModal, setActiveModal] = useState(null);
   const [error,       setError]       = useState('');
 
-  useEffect(() => {
+  const fetchSummary = useCallback(() => {
     apiFetch('/api/finance/summary')
       .then(res => {
         if (!res.ok) return res.json().then(b => Promise.reject(new Error(b.detail || 'Error')));
@@ -117,16 +124,18 @@ export default function Dashboard() {
       })
       .then(setSummary)
       .catch(err => setError(err.message));
+  }, [apiFetch]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const fetchChanges = useCallback(() => {
     apiFetch('/api/finance/changes')
       .then(res => res.ok ? res.json() : null)
       .then(data => data && setChanges(data))
       .catch(() => {});
+  }, [apiFetch]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    apiFetch('/api/profile/onboarding')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data) setOnboarding(data); })
-      .catch(() => {});
+  useEffect(() => {
+    fetchSummary();
+    fetchChanges();
 
     apiFetch('/api/profile')
       .then(res => res.ok ? res.json() : null)
@@ -143,18 +152,18 @@ export default function Dashboard() {
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleWizardComplete() {
-    setShowWizard(false);
-    setOnboarding(prev => prev ? { ...prev, onboarding_completed: true } : prev);
-    apiFetch('/api/finance/summary')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => data && setSummary(data))
-      .catch(() => {});
+  function handleModalSuccess() {
+    setActiveModal(null);
+    fetchSummary();
+    fetchChanges();
   }
 
-  function handleWizardDismiss() {
-    setShowWizard(false);
-    setOnboarding(prev => prev ? { ...prev, onboarding_dismiss_count: (prev.onboarding_dismiss_count ?? 0) + 1 } : prev);
+  function openModal(type) { setActiveModal(type); }
+  function closeModal()    { setActiveModal(null); }
+
+  function openModalForKey(key) {
+    const type = CHECKLIST_MODAL_MAP[key];
+    if (type) setActiveModal(type);
   }
 
   if (error) {
@@ -184,15 +193,14 @@ export default function Dashboard() {
 
   const hasIncome = t.gross_annual > 0;
   const period    = changes?.weekly ?? changes?.monthly ?? null;
-  const cs        = summary?.completion_status ?? {};
 
   function formatRunway(months) {
     const whole = Math.floor(months);
-    const days = Math.round((months - whole) * 30.44);
+    const days  = Math.round((months - whole) * 30.44);
     const mo = n => `${n} ${n === 1 ? 'month' : 'months'}`;
     const dy = n => `${n} ${n === 1 ? 'day' : 'days'}`;
     if (whole === 0) return dy(days);
-    if (days === 0) return mo(whole);
+    if (days === 0)  return mo(whole);
     return `${mo(whole)}, ${dy(days)}`;
   }
 
@@ -214,14 +222,11 @@ export default function Dashboard() {
   return (
     <>
       <NavBar />
-      {showWizard && (
-        <OnboardingWizard
-          initialStep={0}
-          dismissCount={onboarding?.onboarding_dismiss_count ?? 0}
-          firstName={firstName}
-          onFirstNameChange={setFirstName}
-          onComplete={handleWizardComplete}
-          onDismiss={handleWizardDismiss}
+      {activeModal && (
+        <QuickAddModal
+          type={activeModal}
+          onClose={closeModal}
+          onSuccess={handleModalSuccess}
         />
       )}
       <div className="dashboard-wrapper">
@@ -258,6 +263,7 @@ export default function Dashboard() {
                     to="/savings"
                     value={total_savings_balance}
                     metric={period?.total_savings_balance}
+                    onAdd={() => openModal('savings')}
                   />
                   <NwRow
                     label="Pension pot"
@@ -265,12 +271,14 @@ export default function Dashboard() {
                     to="/pension"
                     value={pension_pot_balance}
                     metric={period?.pension_pot_balance}
+                    onAdd={() => openModal('pension')}
                   />
                   <NwRow
                     label="Assets"
                     addLabel="Add assets"
                     to="/assets"
                     value={total_assets_value}
+                    onAdd={() => openModal('asset')}
                   />
                   <NwRow
                     label="Total debt"
@@ -280,6 +288,7 @@ export default function Dashboard() {
                     displayValue={`−${gbp(total_debt_balance)}`}
                     metric={period?.total_debt_balance}
                     className="row-muted"
+                    onAdd={() => openModal('debt')}
                   />
                   <tr className="row-total">
                     <td>Net worth</td>
@@ -357,7 +366,7 @@ export default function Dashboard() {
                       <td>−{gbp(monthly_expenses)}</td>
                     </tr>
                   ) : (
-                    <OutgoingsAddRow addLabel="Add expenses" to="/expenses" />
+                    <OutgoingsAddRow addLabel="Add expenses" onAdd={() => openModal('expense')} />
                   )}
                   {monthly_debt_payments > 0 ? (
                     <tr className="nw-row-link row-muted" onClick={() => navigate('/debts')}>
@@ -365,7 +374,7 @@ export default function Dashboard() {
                       <td>−{gbp(monthly_debt_payments)}</td>
                     </tr>
                   ) : (
-                    <OutgoingsAddRow addLabel="Add debts" to="/debts" />
+                    <OutgoingsAddRow addLabel="Add debts" onAdd={() => openModal('debt')} />
                   )}
                   {monthly_savings_contributions > 0 ? (
                     <tr className="row-muted">
@@ -373,7 +382,7 @@ export default function Dashboard() {
                       <td>−{gbp(monthly_savings_contributions)}</td>
                     </tr>
                   ) : (
-                    <OutgoingsAddRow addLabel="Add savings" to="/savings" />
+                    <OutgoingsAddRow addLabel="Add savings" onAdd={() => openModal('savings')} />
                   )}
                   <tr className="row-total">
                     <td>Disposable income</td>
@@ -391,7 +400,7 @@ export default function Dashboard() {
             <div
               className="card runway-card runway-card--null"
               style={total_savings_balance === 0 ? { cursor: 'pointer' } : undefined}
-              onClick={total_savings_balance === 0 ? () => navigate('/savings') : undefined}
+              onClick={total_savings_balance === 0 ? () => openModal('savings') : undefined}
             >
               <p className="card-title">
                 <span className="label-with-tip">Emergency Fund Coverage<InfoTip text="How many months you could cover your essential expenses using your current savings if your income stopped. 3–6 months is generally considered a healthy buffer." /></span>
@@ -433,7 +442,7 @@ export default function Dashboard() {
           {completionStatus && (
             <ChecklistPanel
               status={completionStatus}
-              onOpenWizard={() => setShowWizard(true)}
+              onOpenModal={openModalForKey}
             />
           )}
         </main>

@@ -10,9 +10,11 @@ const ITEMS = [
   { key: 'assets',   label: 'Assets',                path: '/assets' },
 ];
 
+const HAS_MODAL = new Set(['expenses', 'debts', 'savings', 'pension', 'assets']);
+
 const STORAGE_KEY = 'checklist_collapsed';
 
-export default function ChecklistPanel({ status, onOpenWizard }) {
+export default function ChecklistPanel({ status, onOpenModal }) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch { return false; }
   });
@@ -26,55 +28,33 @@ export default function ChecklistPanel({ status, onOpenWizard }) {
   const allDone   = ITEMS.every(item => status[item.key]);
   const doneCount = ITEMS.filter(item => status[item.key]).length;
 
-  if (allDone) {
-    if (!onOpenWizard) return null;
-    return (
-      <aside className="checklist-panel">
-        <button className="checklist-toggle" onClick={toggle} aria-expanded={!collapsed}>
-          <span className="checklist-toggle-label">Setup complete</span>
-          <span className="checklist-badge checklist-badge--done">✓</span>
-          <span className="checklist-chevron">{collapsed ? '›' : '‹'}</span>
-        </button>
-        {!collapsed && (
-          <div className="checklist-wizard-link">
-            <button className="checklist-guide-btn" onClick={onOpenWizard}>
-              Quick setup guide →
-            </button>
-          </div>
-        )}
-      </aside>
-    );
-  }
-
   return (
     <aside className="checklist-panel">
       <button className="checklist-toggle" onClick={toggle} aria-expanded={!collapsed}>
-        <span className="checklist-toggle-label">Setup checklist</span>
-        <span className="checklist-badge">{doneCount}/{ITEMS.length}</span>
+        <span className="checklist-toggle-label">
+          {allDone ? 'Setup complete' : 'Setup checklist'}
+        </span>
+        <span className={`checklist-badge${allDone ? ' checklist-badge--done' : ''}`}>
+          {allDone ? '✓' : `${doneCount}/${ITEMS.length}`}
+        </span>
         <span className="checklist-chevron">{collapsed ? '›' : '‹'}</span>
       </button>
+
       {!collapsed && (
-        <>
-          {onOpenWizard && (
-            <div className="checklist-wizard-link">
-              <button className="checklist-guide-btn" onClick={onOpenWizard}>
-                Quick setup guide →
-              </button>
-            </div>
-          )}
-          <ul className="checklist-list">
-            {ITEMS.map(({ key, label, path }) => (
-              <li key={key} className={`checklist-item${status[key] ? ' checklist-item--done' : ''}`}>
-                <span className="checklist-tick">{status[key] ? '✓' : '○'}</span>
-                {status[key] ? (
-                  <span className="checklist-label">{label}</span>
-                ) : (
-                  <Link to={path} className="checklist-link">{label}</Link>
-                )}
-              </li>
-            ))}
-          </ul>
-        </>
+        <ul className="checklist-list">
+          {ITEMS.map(({ key, label, path }) => (
+            <li key={key} className={`checklist-item${status[key] ? ' checklist-item--done' : ''}`}>
+              <span className="checklist-tick">{status[key] ? '✓' : '○'}</span>
+              {status[key] ? (
+                <Link to={path} className="checklist-label checklist-link">{label}</Link>
+              ) : HAS_MODAL.has(key) && onOpenModal ? (
+                <button className="checklist-link" onClick={() => onOpenModal(key)}>{label}</button>
+              ) : (
+                <Link to={path} className="checklist-link">{label}</Link>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
     </aside>
   );
