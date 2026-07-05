@@ -295,6 +295,7 @@ function AboutYouStep({ onNext, onFirstNameChange }) {
         <button className="btn-primary" onClick={handleContinue} disabled={saving}>
           {saving ? 'Saving…' : 'Continue'}
         </button>
+        <button className="btn-ghost" onClick={onNext}>Skip</button>
       </div>
     </div>
   );
