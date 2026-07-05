@@ -1,10 +1,12 @@
 import { createContext, useCallback, useContext, useState } from 'react';
 import { API_BASE } from '../utils/config';
 
+const TOKEN_KEY = 'token';
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(null);
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
 
   async function login(email, password) {
     const res = await fetch(`${API_BASE}/api/auth/login`, {
@@ -17,6 +19,7 @@ export function AuthProvider({ children }) {
       throw new Error(body.detail || 'Login failed');
     }
     const data = await res.json();
+    localStorage.setItem(TOKEN_KEY, data.access_token);
     setToken(data.access_token);
   }
 
@@ -33,6 +36,7 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
+    localStorage.removeItem(TOKEN_KEY);
     setToken(null);
   }
 
