@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { gbp } from '../utils/format';
 import { API_BASE } from '../utils/config';
 
-const EMPTY = { date_of_birth: '', occupation: '', postcode_outward: '' };
+const EMPTY = { dob_day: '', dob_month: '', dob_year: '', occupation: '', postcode_outward: '' };
 
 const GOAL_OPTIONS = [
   { key: 'understanding_my_finances', emoji: '📊', label: 'Understanding my finances' },
@@ -179,8 +179,11 @@ export default function Profile() {
     apiFetch('/api/profile')
       .then(r => r.json())
       .then(data => {
+        const dobParts = data.date_of_birth ? data.date_of_birth.split('-') : ['', '', ''];
         setForm({
-          date_of_birth: data.date_of_birth ?? '',
+          dob_year: dobParts[0] ?? '',
+          dob_month: dobParts[1] ?? '',
+          dob_day: dobParts[2] ?? '',
           occupation: data.occupation ?? '',
           postcode_outward: data.postcode_outward ?? '',
         });
@@ -254,8 +257,12 @@ export default function Profile() {
     setSaved(false);
 
     const payload = {};
-    if (form.date_of_birth) payload.date_of_birth = form.date_of_birth;
-    else payload.date_of_birth = null;
+    const { dob_day, dob_month, dob_year } = form;
+    if (dob_day && dob_month && dob_year) {
+      payload.date_of_birth = `${dob_year.padStart(4, '0')}-${dob_month.padStart(2, '0')}-${dob_day.padStart(2, '0')}`;
+    } else {
+      payload.date_of_birth = null;
+    }
     payload.occupation = form.occupation.trim() || null;
     payload.postcode_outward = form.postcode_outward.trim() || null;
 
@@ -314,13 +321,30 @@ export default function Profile() {
             {formError && <div className="error-banner">{formError}</div>}
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label htmlFor="dob">Date of birth</label>
-                <input
-                  id="dob"
-                  type="date"
-                  value={form.date_of_birth}
-                  onChange={e => field('date_of_birth', e.target.value)}
-                />
+                <label>Date of birth</label>
+                <div className="wizard-dob-row">
+                  <input
+                    type="number" min="1" max="31"
+                    value={form.dob_day}
+                    onChange={e => field('dob_day', e.target.value)}
+                    placeholder="DD"
+                    className="wizard-dob-part wizard-dob-day"
+                  />
+                  <input
+                    type="number" min="1" max="12"
+                    value={form.dob_month}
+                    onChange={e => field('dob_month', e.target.value)}
+                    placeholder="MM"
+                    className="wizard-dob-part wizard-dob-month"
+                  />
+                  <input
+                    type="number" min="1900" max={new Date().getFullYear()}
+                    value={form.dob_year}
+                    onChange={e => field('dob_year', e.target.value)}
+                    placeholder="YYYY"
+                    className="wizard-dob-part wizard-dob-year"
+                  />
+                </div>
               </div>
               <div className="form-group wizard-occ-group">
                 <label htmlFor="occupation">Occupation</label>

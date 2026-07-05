@@ -295,7 +295,6 @@ function AboutYouStep({ onNext, onFirstNameChange }) {
         <button className="btn-primary" onClick={handleContinue} disabled={saving}>
           {saving ? 'Saving…' : 'Continue'}
         </button>
-        <button className="btn-ghost" onClick={onNext}>Skip</button>
       </div>
     </div>
   );
@@ -904,8 +903,6 @@ export default function OnboardingWizard({ initialStep, dismissCount, firstName:
   return (
     <div className="wizard-overlay" role="dialog" aria-modal="true" aria-label="Setup wizard">
       <div className="wizard-modal">
-        <button className="wizard-close" onClick={handleDismiss} aria-label="Close wizard">×</button>
-
         {isCompletion ? (
           <div className="wizard-completion">
             <div className="wizard-completion-icon">✓</div>

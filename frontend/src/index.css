@@ -1497,13 +1497,18 @@ input[type="date"] {
 }
 
 .wizard-goal-tile:hover {
-  border-color: var(--color-positive);
-  background: #f0fdf4;
+  border-color: var(--color-primary);
+  background: rgba(26, 58, 92, 0.05);
 }
 
 .wizard-goal-tile--selected {
   border-color: var(--color-positive);
   background: #f0fdf4;
+}
+
+.wizard-goal-tile--selected:hover {
+  border-color: var(--color-positive);
+  background: #dcfce7;
 }
 
 .wizard-goal-emoji {
