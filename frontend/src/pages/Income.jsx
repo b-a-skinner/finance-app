@@ -12,6 +12,7 @@ export default function Income() {
   const { items, loading, error, create, update, remove } = useResource('/api/income');
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [actionError, setActionError] = useState('');
@@ -22,16 +23,18 @@ export default function Income() {
 
   function startEdit(item) {
     setEditingId(item.id);
+    setFormOpen(true);
     setForm({
       label: item.label,
       gross_annual_salary: item.gross_annual_salary,
     });
     setFormError('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (window.innerWidth >= 768) window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function cancelEdit() {
     setEditingId(null);
+    setFormOpen(false);
     setForm(EMPTY);
     setFormError('');
   }
@@ -57,6 +60,7 @@ export default function Income() {
         await create(data);
       }
       setForm(EMPTY);
+      setFormOpen(false);
     } catch (err) {
       setFormError(err.message);
     } finally {
@@ -78,7 +82,8 @@ export default function Income() {
         {actionError && <div className="error-banner">{actionError}</div>}
         <div className="resource-layout">
 
-          <div className="card resource-form-card">
+          <div className={`card resource-form-card${!formOpen && !editingId ? ' resource-form-card--closed' : ''}`}>
+            <button type="button" className="resource-mobile-add-btn" onClick={() => setFormOpen(true)}>+ Add income source</button>
             <p className="card-title">{editingId ? 'Edit income source' : 'Add income source'}</p>
             {formError && <div className="error-banner">{formError}</div>}
             <form onSubmit={handleSubmit}>

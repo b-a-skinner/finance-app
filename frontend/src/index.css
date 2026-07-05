@@ -533,6 +533,48 @@ body {
   }
 }
 
+@media (max-width: 767px) {
+  .resource-layout {
+    display: flex;
+    flex-direction: column;
+  }
+  .resource-list-card {
+    order: 1;
+  }
+  .resource-form-card {
+    order: 2;
+    position: static;
+  }
+  .resource-form-card--closed .card-title,
+  .resource-form-card--closed form,
+  .resource-form-card--closed .error-banner {
+    display: none;
+  }
+  .resource-mobile-add-btn {
+    display: block;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .resource-mobile-add-btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+}
+
+@media (min-width: 768px) {
+  .resource-mobile-add-btn {
+    display: none;
+  }
+}
+
 /* Form card */
 .resource-form-card {
   position: sticky;

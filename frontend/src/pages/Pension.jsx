@@ -10,6 +10,7 @@ export default function Pension() {
   const { items, loading, error, create, update, remove } = useResource('/api/pension');
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [actionError, setActionError] = useState('');
@@ -20,17 +21,19 @@ export default function Pension() {
 
   function startEdit(item) {
     setEditingId(item.id);
+    setFormOpen(true);
     setForm({
       current_balance: item.current_balance,
       employee_contribution_pct: item.employee_contribution_pct,
       employer_contribution_pct: item.employer_contribution_pct,
     });
     setFormError('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (window.innerWidth >= 768) window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function cancelEdit() {
     setEditingId(null);
+    setFormOpen(false);
     setForm(EMPTY);
     setFormError('');
   }
@@ -60,6 +63,7 @@ export default function Pension() {
         await create(data);
       }
       setForm(EMPTY);
+      setFormOpen(false);
     } catch (err) {
       setFormError(err.message);
     } finally {
@@ -81,7 +85,8 @@ export default function Pension() {
         {actionError && <div className="error-banner">{actionError}</div>}
         <div className="resource-layout">
 
-          <div className="card resource-form-card">
+          <div className={`card resource-form-card${!formOpen && !editingId ? ' resource-form-card--closed' : ''}`}>
+            <button type="button" className="resource-mobile-add-btn" onClick={() => setFormOpen(true)}>+ Add pension pot</button>
             <p className="card-title">{editingId ? 'Edit pension pot' : 'Add pension pot'}</p>
             {formError && <div className="error-banner">{formError}</div>}
             <form onSubmit={handleSubmit}>
