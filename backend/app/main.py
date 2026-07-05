@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import assets, auth, config, debts, expenses, finance, income, occupations, pension, profile, savings
+from app.routes import admin, assets, auth, config, debts, expenses, finance, income, occupations, pension, profile, savings
 
 app = FastAPI(title="Finance App API")
 
@@ -17,6 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(admin.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(config.router, prefix="/api")
 app.include_router(finance.router, prefix="/api")

@@ -2,6 +2,7 @@ import os
 
 # Must be set before any app module is imported — app/config.py reads this at load time
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
+os.environ.setdefault("ADMIN_KEY", "test-admin-key")
 
 import pytest
 from fastapi.testclient import TestClient

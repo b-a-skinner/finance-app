@@ -1,0 +1,206 @@
+import json
+import os
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Header as FastAPIHeader
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models import Asset, Debt, Expense, FinancialSnapshot, IncomeSource, PensionPot, SavingsGoal
+from app.models.user import User
+
+router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _require_admin_key(x_admin_key: Optional[str] = FastAPIHeader(None)) -> None:
+    admin_key = os.getenv("ADMIN_KEY", "")
+    if not admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+class ProfileComplete(BaseModel):
+    income: bool
+    expenses: bool
+    debts: bool
+    savings: bool
+    pension: bool
+    assets: bool
+
+
+class AdminUserOut(BaseModel):
+    id: int
+    email: str
+    first_name: Optional[str]
+    created_at: datetime
+    last_active: datetime
+    profile_complete: ProfileComplete
+    onboarding_completed: bool
+    financial_goals: Optional[list]
+
+
+class FeatureAdoption(BaseModel):
+    income: float
+    expenses: float
+    debts: float
+    savings: float
+    pension: float
+    assets: float
+
+
+class AdminStatsOut(BaseModel):
+    total_users: int
+    users_active_last_7_days: int
+    users_active_last_30_days: int
+    users_completed_onboarding: int
+    avg_income_sources_per_user: float
+    avg_debts_per_user: float
+    avg_savings_goals_per_user: float
+    users_with_income: int
+    users_with_debts: int
+    users_with_savings: int
+    users_with_pension: int
+    users_with_assets: int
+    feature_adoption: FeatureAdoption
+
+
+@router.get("/users", response_model=list[AdminUserOut])
+def list_users(
+    db: Session = Depends(get_db),
+    _: None = Depends(_require_admin_key),
+):
+    users = db.query(User).all()
+    result = []
+    for user in users:
+        last_snapshot = (
+            db.query(FinancialSnapshot)
+            .filter_by(user_id=user.id)
+            .order_by(FinancialSnapshot.captured_at.desc())
+            .first()
+        )
+        last_active = last_snapshot.captured_at if last_snapshot else user.created_at
+
+        has_income   = db.query(IncomeSource).filter_by(user_id=user.id, is_active=True).first() is not None
+        has_expenses = db.query(Expense).filter_by(user_id=user.id, is_active=True).first() is not None
+        has_debts    = db.query(Debt).filter_by(user_id=user.id, is_active=True).first() is not None
+        has_savings  = db.query(SavingsGoal).filter_by(user_id=user.id, is_active=True).first() is not None
+        has_pension  = db.query(PensionPot).filter_by(user_id=user.id, is_active=True).first() is not None
+        has_assets   = db.query(Asset).filter_by(user_id=user.id, is_active=True).first() is not None
+
+        goals = None
+        if user.financial_goals:
+            try:
+                goals = json.loads(user.financial_goals)
+            except (json.JSONDecodeError, TypeError):
+                goals = None
+
+        result.append(AdminUserOut(
+            id=user.id,
+            email=user.email,
+            first_name=user.first_name,
+            created_at=user.created_at,
+            last_active=last_active,
+            profile_complete=ProfileComplete(
+                income=has_income,
+                expenses=has_expenses,
+                debts=has_debts,
+                savings=has_savings,
+                pension=has_pension,
+                assets=has_assets,
+            ),
+            onboarding_completed=user.onboarding_completed,
+            financial_goals=goals,
+        ))
+    return result
+
+
+@router.get("/stats", response_model=AdminStatsOut)
+def get_stats(
+    db: Session = Depends(get_db),
+    _: None = Depends(_require_admin_key),
+):
+    now = datetime.now(timezone.utc)
+    seven_days_ago  = now - timedelta(days=7)
+    thirty_days_ago = now - timedelta(days=30)
+
+    total_users = db.query(User).count()
+
+    users_active_7 = (
+        db.query(FinancialSnapshot.user_id)
+        .filter(FinancialSnapshot.captured_at >= seven_days_ago)
+        .distinct()
+        .count()
+    )
+    users_active_30 = (
+        db.query(FinancialSnapshot.user_id)
+        .filter(FinancialSnapshot.captured_at >= thirty_days_ago)
+        .distinct()
+        .count()
+    )
+
+    users_completed = db.query(User).filter_by(onboarding_completed=True).count()
+
+    users_with_income   = db.query(IncomeSource.user_id).filter_by(is_active=True).distinct().count()
+    users_with_expenses = db.query(Expense.user_id).filter_by(is_active=True).distinct().count()
+    users_with_debts    = db.query(Debt.user_id).filter_by(is_active=True).distinct().count()
+    users_with_savings  = db.query(SavingsGoal.user_id).filter_by(is_active=True).distinct().count()
+    users_with_pension  = db.query(PensionPot.user_id).filter_by(is_active=True).distinct().count()
+    users_with_assets   = db.query(Asset.user_id).filter_by(is_active=True).distinct().count()
+
+    total_income_rows  = db.query(IncomeSource).filter_by(is_active=True).count()
+    total_debt_rows    = db.query(Debt).filter_by(is_active=True).count()
+    total_savings_rows = db.query(SavingsGoal).filter_by(is_active=True).count()
+
+    def avg(n: int) -> float:
+        return round(n / total_users, 2) if total_users else 0.0
+
+    def pct(n: int) -> float:
+        return round((n / total_users) * 100, 1) if total_users else 0.0
+
+    return AdminStatsOut(
+        total_users=total_users,
+        users_active_last_7_days=users_active_7,
+        users_active_last_30_days=users_active_30,
+        users_completed_onboarding=users_completed,
+        avg_income_sources_per_user=avg(total_income_rows),
+        avg_debts_per_user=avg(total_debt_rows),
+        avg_savings_goals_per_user=avg(total_savings_rows),
+        users_with_income=users_with_income,
+        users_with_debts=users_with_debts,
+        users_with_savings=users_with_savings,
+        users_with_pension=users_with_pension,
+        users_with_assets=users_with_assets,
+        feature_adoption=FeatureAdoption(
+            income=pct(users_with_income),
+            expenses=pct(users_with_expenses),
+            debts=pct(users_with_debts),
+            savings=pct(users_with_savings),
+            pension=pct(users_with_pension),
+            assets=pct(users_with_assets),
+        ),
+    )
+
+
+@router.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(_require_admin_key),
+):
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    db.query(IncomeSource).filter_by(user_id=user_id).delete(synchronize_session=False)
+    db.query(Expense).filter_by(user_id=user_id).delete(synchronize_session=False)
+    db.query(Debt).filter_by(user_id=user_id).delete(synchronize_session=False)
+    db.query(SavingsGoal).filter_by(user_id=user_id).delete(synchronize_session=False)
+    db.query(PensionPot).filter_by(user_id=user_id).delete(synchronize_session=False)
+    db.query(Asset).filter_by(user_id=user_id).delete(synchronize_session=False)
+    db.query(FinancialSnapshot).filter_by(user_id=user_id).delete(synchronize_session=False)
+
+    db.delete(user)
+    db.commit()
+    return {"message": "User deleted"}
