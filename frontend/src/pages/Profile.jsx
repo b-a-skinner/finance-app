@@ -6,6 +6,15 @@ import { API_BASE } from '../utils/config';
 
 const EMPTY = { date_of_birth: '', occupation: '', postcode_outward: '' };
 
+const GOAL_OPTIONS = [
+  { key: 'understanding_my_finances', emoji: '📊', label: 'Understanding my finances' },
+  { key: 'building_my_savings',       emoji: '🏦', label: 'Building my savings' },
+  { key: 'buying_a_home',             emoji: '🏠', label: 'Buying a home' },
+  { key: 'managing_my_spending',      emoji: '💰', label: 'Managing my spending' },
+  { key: 'paying_off_debt',           emoji: '🎯', label: 'Paying off debt' },
+  { key: 'planning_for_the_future',   emoji: '📈', label: 'Planning for the future' },
+];
+
 function comparisonWord(pct) {
   if (pct === null || pct === undefined) return null;
   if (pct > 110) return 'above';
@@ -150,6 +159,9 @@ export default function Profile() {
   const [dobSet, setDobSet] = useState(false);
   const [postcodeSet, setPostcodeSet] = useState(false);
   const [comparison, setComparison] = useState(null);
+  const [goals, setGoals] = useState([]);
+  const [goalsSaving, setGoalsSaving] = useState(false);
+  const [goalsSaved, setGoalsSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -185,6 +197,17 @@ export default function Profile() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    apiFetch('/api/profile/onboarding')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.financial_goals) {
+          try { setGoals(JSON.parse(data.financial_goals)); } catch { /* ignore */ }
+        }
+      })
+      .catch(() => {});
+  }, [apiFetch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     fetch(`${API_BASE}/api/occupations`)
       .then(r => r.ok ? r.json() : [])
       .then(setOccupations)
@@ -204,6 +227,25 @@ export default function Profile() {
   function field(key, val) {
     setForm(prev => ({ ...prev, [key]: val }));
     setSaved(false);
+  }
+
+  function toggleGoal(key) {
+    setGoals(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+    setGoalsSaved(false);
+  }
+
+  async function handleGoalsSave() {
+    setGoalsSaving(true);
+    setGoalsSaved(false);
+    try {
+      await apiFetch('/api/profile/onboarding', {
+        method: 'PATCH',
+        body: JSON.stringify({ financial_goals: JSON.stringify(goals) }),
+      });
+      setGoalsSaved(true);
+    } finally {
+      setGoalsSaving(false);
+    }
   }
 
   async function handleSubmit(e) {
@@ -362,6 +404,40 @@ export default function Profile() {
 
         <div className="resource-layout resource-layout--single" style={{ marginTop: '1.5rem' }}>
           <HowYouCompare cmp={comparison} dobSet={dobSet} postcodeSet={postcodeSet} />
+        </div>
+
+        <div className="resource-layout resource-layout--single" style={{ marginTop: '1.5rem' }}>
+          <div className="card">
+            <p className="card-title">Your goals</p>
+            {goals.length === 0 && (
+              <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }}>
+                Select what matters most to you.
+              </p>
+            )}
+            <div className="wizard-goals-grid">
+              {GOAL_OPTIONS.map(g => (
+                <button
+                  key={g.key}
+                  type="button"
+                  className={`wizard-goal-tile${goals.includes(g.key) ? ' wizard-goal-tile--selected' : ''}`}
+                  onClick={() => toggleGoal(g.key)}
+                >
+                  <span className="wizard-goal-emoji">{g.emoji}</span>
+                  <span className="wizard-goal-label">{g.label}</span>
+                </button>
+              ))}
+            </div>
+            <div className="form-actions" style={{ marginTop: '1rem' }}>
+              <button type="button" className="btn-primary" onClick={handleGoalsSave} disabled={goalsSaving}>
+                {goalsSaving ? 'Saving…' : 'Save goals'}
+              </button>
+              {goalsSaved && (
+                <span style={{ color: 'var(--color-positive)', fontSize: '0.9rem', alignSelf: 'center' }}>
+                  Saved ✓
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       </main>
     </>

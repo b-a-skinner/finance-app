@@ -295,7 +295,6 @@ function AboutYouStep({ onNext, onFirstNameChange }) {
         <button className="btn-primary" onClick={handleContinue} disabled={saving}>
           {saving ? 'Saving…' : 'Continue'}
         </button>
-        <button className="btn-ghost" onClick={onNext}>Skip</button>
       </div>
     </div>
   );
@@ -383,7 +382,7 @@ function IncomeStep({ onNext, onBack }) {
           <label>Gross annual salary (£)</label>
           <input type="number" min="0" step="1" value={form.gross_annual_salary} onChange={e => setForm(p => ({ ...p, gross_annual_salary: e.target.value }))} placeholder="e.g. 45000" />
         </div>
-        <button type="submit" className="btn-secondary" disabled={saving}>{saving ? 'Adding…' : 'Add income source'}</button>
+        <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Adding…' : 'Add income source'}</button>
       </form>
       <div className="wizard-step-actions">
         <button className="btn-secondary" onClick={onBack}>Back</button>
@@ -452,12 +451,12 @@ function ExpensesStep({ onNext, onBack }) {
             <option value="annual">Annual</option>
           </select>
         </div>
-        <button type="submit" className="btn-secondary" disabled={saving}>{saving ? 'Adding…' : 'Add expense'}</button>
+        <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Adding…' : 'Add expense'}</button>
       </form>
       <div className="wizard-step-actions">
         <button className="btn-secondary" onClick={onBack}>Back</button>
         <button className="btn-primary" onClick={onNext}>Continue</button>
-        {existing.length === 0 && <button className="btn-ghost" onClick={onNext}>Skip</button>}
+        {existing.length === 0 && <button className="btn-secondary" onClick={onNext}>Skip</button>}
       </div>
     </div>
   );
@@ -582,12 +581,12 @@ function DebtsStep({ onNext, onBack }) {
           <label>Monthly minimum payment (£)</label>
           <input type="number" min="0" step="0.01" value={form.min_payment} onChange={e => setForm(p => ({ ...p, min_payment: e.target.value }))} placeholder="e.g. 50" />
         </div>
-        <button type="submit" className="btn-secondary" disabled={saving}>{saving ? 'Adding…' : 'Add debt'}</button>
+        <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Adding…' : 'Add debt'}</button>
       </form>
       <div className="wizard-step-actions">
         <button className="btn-secondary" onClick={onBack}>Back</button>
         <button className="btn-primary" onClick={onNext}>Continue</button>
-        {existing.length === 0 && <button className="btn-ghost" onClick={onNext}>Skip</button>}
+        {existing.length === 0 && <button className="btn-secondary" onClick={onNext}>Skip</button>}
       </div>
     </div>
   );
@@ -685,12 +684,12 @@ function SavingsStep({ onNext, onBack }) {
           <label>Monthly contribution (£)</label>
           <input type="number" min="0" step="0.01" value={form.monthly_contribution} onChange={e => setForm(p => ({ ...p, monthly_contribution: e.target.value }))} placeholder="e.g. 200" />
         </div>
-        <button type="submit" className="btn-secondary" disabled={saving}>{saving ? 'Adding…' : 'Add account'}</button>
+        <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Adding…' : 'Add account'}</button>
       </form>
       <div className="wizard-step-actions">
         <button className="btn-secondary" onClick={onBack}>Back</button>
         <button className="btn-primary" onClick={onNext}>Continue</button>
-        {existing.length === 0 && <button className="btn-ghost" onClick={onNext}>Skip</button>}
+        {existing.length === 0 && <button className="btn-secondary" onClick={onNext}>Skip</button>}
       </div>
     </div>
   );
@@ -759,12 +758,12 @@ function PensionStep({ onNext, onBack }) {
           <label>Employer contribution (%)</label>
           <input type="number" min="0" step="0.1" value={form.employer_contribution_pct} onChange={e => setForm(p => ({ ...p, employer_contribution_pct: e.target.value }))} placeholder="e.g. 3" />
         </div>
-        <button type="submit" className="btn-secondary" disabled={saving}>{saving ? 'Adding…' : 'Add pension'}</button>
+        <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Adding…' : 'Add pension'}</button>
       </form>
       <div className="wizard-step-actions">
         <button className="btn-secondary" onClick={onBack}>Back</button>
         <button className="btn-primary" onClick={onNext}>Continue</button>
-        {existing.length === 0 && <button className="btn-ghost" onClick={onNext}>Skip</button>}
+        {existing.length === 0 && <button className="btn-secondary" onClick={onNext}>Skip</button>}
       </div>
     </div>
   );
@@ -832,12 +831,12 @@ function AssetsStep({ onNext, onBack }) {
           <label>Current value (£)</label>
           <input type="number" min="0" step="0.01" value={form.current_value} onChange={e => setForm(p => ({ ...p, current_value: e.target.value }))} placeholder="e.g. 250000" />
         </div>
-        <button type="submit" className="btn-secondary" disabled={saving}>{saving ? 'Adding…' : 'Add asset'}</button>
+        <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Adding…' : 'Add asset'}</button>
       </form>
       <div className="wizard-step-actions">
         <button className="btn-secondary" onClick={onBack}>Back</button>
         <button className="btn-primary" onClick={onNext}>Finish</button>
-        {existing.length === 0 && <button className="btn-ghost" onClick={onNext}>Skip</button>}
+        {existing.length === 0 && <button className="btn-secondary" onClick={onNext}>Skip</button>}
       </div>
     </div>
   );
