@@ -463,9 +463,12 @@ function ExpensesStep({ onNext, onBack }) {
   );
 }
 
+const EMPTY_DEBT = { debt_type: 'credit_card', balance: '', interest_rate: '', min_payment: '', student_loan_plan_id: '', graduation_year: '' };
+
 function DebtsStep({ onNext, onBack }) {
   const { apiFetch } = useAuth();
-  const [form, setForm] = useState({ debt_type: 'credit_card', balance: '', interest_rate: '', min_payment: '' });
+  const [form, setForm] = useState(EMPTY_DEBT);
+  const [loanPlans, setLoanPlans] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [existing, setExisting] = useState([]);
@@ -477,6 +480,13 @@ function DebtsStep({ onNext, onBack }) {
       .catch(() => {});
   }, [apiFetch]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    fetch(`${API_BASE}/api/config/student-loan-plans`)
+      .then(r => r.json())
+      .then(setLoanPlans)
+      .catch(() => {});
+  }, []);
+
   async function handleAdd(e) {
     e.preventDefault();
     setError('');
@@ -486,16 +496,24 @@ function DebtsStep({ onNext, onBack }) {
     if (isNaN(balance) || balance < 0) { setError('Enter a valid balance.'); return; }
     if (isNaN(rate) || rate < 0) { setError('Enter a valid interest rate.'); return; }
     if (isNaN(minPay) || minPay < 0) { setError('Enter a valid minimum payment.'); return; }
+    if (form.debt_type === 'student_loan' && !form.student_loan_plan_id) { setError('Please select your student loan plan.'); return; }
     setSaving(true);
     try {
       const res = await apiFetch('/api/debts', {
         method: 'POST',
-        body: JSON.stringify({ debt_type: form.debt_type, balance, interest_rate: rate, min_payment: minPay }),
+        body: JSON.stringify({
+          debt_type: form.debt_type,
+          balance,
+          interest_rate: rate,
+          min_payment: minPay,
+          student_loan_plan_id: form.debt_type === 'student_loan' && form.student_loan_plan_id ? parseInt(form.student_loan_plan_id, 10) : null,
+          graduation_year: form.debt_type === 'student_loan' && form.graduation_year ? parseInt(form.graduation_year, 10) : null,
+        }),
       });
       if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.detail || 'Failed'); }
       const newItem = await res.json();
       setExisting(prev => [...prev, newItem]);
-      setForm({ debt_type: 'credit_card', balance: '', interest_rate: '', min_payment: '' });
+      setForm(EMPTY_DEBT);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -513,9 +531,43 @@ function DebtsStep({ onNext, onBack }) {
           <select value={form.debt_type} onChange={e => setForm(p => ({ ...p, debt_type: e.target.value }))}>
             <option value="credit_card">Credit card</option>
             <option value="mortgage">Mortgage</option>
+            <option value="student_loan">Student loan</option>
             <option value="other">Other</option>
           </select>
         </div>
+        {form.debt_type === 'student_loan' && (
+          <>
+            <div className="form-group">
+              <label>Student loan plan</label>
+              <select value={form.student_loan_plan_id} onChange={e => setForm(p => ({ ...p, student_loan_plan_id: e.target.value }))}>
+                <option value="">Select plan…</option>
+                {loanPlans.map(p => (
+                  <option key={p.id} value={p.id}>{p.plan_name}</option>
+                ))}
+              </select>
+            </div>
+            <p className="projection-link">
+              <a href="https://www.gov.uk/sign-in-to-manage-your-student-loan-balance" target="_blank" rel="noopener noreferrer">
+                Sign in to view your student loan balance on <span style={{ whiteSpace: 'nowrap' }}>gov.uk →</span>
+              </a>
+            </p>
+            <div className="form-group">
+              <label>Year you graduated (or left university)</label>
+              <input
+                type="number"
+                min="1990"
+                max="2050"
+                step="1"
+                value={form.graduation_year}
+                onChange={e => setForm(p => ({ ...p, graduation_year: e.target.value }))}
+                placeholder="e.g. 2019"
+              />
+              <span className="form-hint">
+                Used to calculate your projected repayment period. Repayments begin April 6 the following year.
+              </span>
+            </div>
+          </>
+        )}
         <div className="form-group">
           <label>Outstanding balance (£)</label>
           <input type="number" min="0" step="0.01" value={form.balance} onChange={e => setForm(p => ({ ...p, balance: e.target.value }))} placeholder="e.g. 5000" />
