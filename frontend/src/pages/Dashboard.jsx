@@ -368,21 +368,17 @@ export default function Dashboard() {
                   ) : (
                     <OutgoingsAddRow addLabel="Add expenses" onAdd={() => openModal('expense')} />
                   )}
-                  {monthly_debt_payments > 0 ? (
+                  {monthly_debt_payments > 0 && (
                     <tr className="nw-row-link row-muted" onClick={() => navigate('/debts')}>
                       <td>Debt payments</td>
                       <td>−{gbp(monthly_debt_payments)}</td>
                     </tr>
-                  ) : (
-                    <OutgoingsAddRow addLabel="Add debts" onAdd={() => openModal('debt')} />
                   )}
-                  {monthly_savings_contributions > 0 ? (
+                  {monthly_savings_contributions > 0 && (
                     <tr className="row-muted">
                       <td>Savings contributions</td>
                       <td>−{gbp(monthly_savings_contributions)}</td>
                     </tr>
-                  ) : (
-                    <OutgoingsAddRow addLabel="Add savings" onAdd={() => openModal('savings')} />
                   )}
                   <tr className="row-total">
                     <td>Disposable income</td>
