@@ -229,9 +229,6 @@ export default function Dashboard() {
         <main className="dashboard">
           {firstName && <p className="dashboard-greeting">Hi {firstName},</p>}
 
-          {/* ── Benchmark carousel — white card at top ── */}
-          <BenchmarkCarousel comparison={comparison} profile={profileData} />
-
           {/* ── Hero: disposable income ── */}
           {hasIncome && (
             <div className="hero">
@@ -429,6 +426,9 @@ export default function Dashboard() {
               <p className="runway-context">{runwayContext(months_of_runway)}</p>
             </div>
           )}
+
+          {/* ── Benchmark carousel — below emergency fund ── */}
+          <BenchmarkCarousel comparison={comparison} profile={profileData} />
         </main>
 
         {completionStatus && (
