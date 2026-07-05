@@ -190,7 +190,7 @@ export default function Dashboard() {
       <NavBar />
       {showWizard && (
         <OnboardingWizard
-          initialStep={onboarding?.current_onboarding_step ?? 0}
+          initialStep={0}
           dismissCount={onboarding?.onboarding_dismiss_count ?? 0}
           firstName={firstName}
           onFirstNameChange={setFirstName}

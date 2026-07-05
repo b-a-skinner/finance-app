@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 const ITEMS = [
-  { key: 'income',   label: 'Income',   path: '/income' },
-  { key: 'expenses', label: 'Expenses', path: '/expenses' },
-  { key: 'debts',    label: 'Debts',    path: '/debts' },
-  { key: 'savings',  label: 'Savings & Investments',  path: '/savings' },
-  { key: 'pension',  label: 'Pension',  path: '/pension' },
-  { key: 'assets',   label: 'Assets',   path: '/assets' },
+  { key: 'income',   label: 'Income',                path: '/income' },
+  { key: 'expenses', label: 'Expenses',              path: '/expenses' },
+  { key: 'debts',    label: 'Debts',                 path: '/debts' },
+  { key: 'savings',  label: 'Savings & Investments', path: '/savings' },
+  { key: 'pension',  label: 'Pension',               path: '/pension' },
+  { key: 'assets',   label: 'Assets',                path: '/assets' },
 ];
 
 const STORAGE_KEY = 'checklist_collapsed';
@@ -23,10 +23,28 @@ export default function ChecklistPanel({ status, onOpenWizard }) {
     try { localStorage.setItem(STORAGE_KEY, String(next)); } catch { /* ignore */ }
   }
 
-  const allDone = ITEMS.every(item => status[item.key]);
-  if (allDone) return null;
-
+  const allDone   = ITEMS.every(item => status[item.key]);
   const doneCount = ITEMS.filter(item => status[item.key]).length;
+
+  if (allDone) {
+    if (!onOpenWizard) return null;
+    return (
+      <aside className="checklist-panel">
+        <button className="checklist-toggle" onClick={toggle} aria-expanded={!collapsed}>
+          <span className="checklist-toggle-label">Setup complete</span>
+          <span className="checklist-badge checklist-badge--done">✓</span>
+          <span className="checklist-chevron">{collapsed ? '›' : '‹'}</span>
+        </button>
+        {!collapsed && (
+          <div className="checklist-wizard-link">
+            <button className="checklist-guide-btn" onClick={onOpenWizard}>
+              Quick setup guide →
+            </button>
+          </div>
+        )}
+      </aside>
+    );
+  }
 
   return (
     <aside className="checklist-panel">
