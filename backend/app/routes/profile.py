@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, IncomeSource, PensionPot, RegionalSalaryBenchmark
+from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, IncomeSource, OccupationSalaryBenchmark, PensionPot, RegionalSalaryBenchmark
 from app.models.user import User
 from app.routes.auth import get_current_user
 from app.schemas import AgeComparisonOut, OnboardingOut, OnboardingUpdate, OccupationOut, ProfileOut, ProfileUpdate
-from app.services.age_benchmark import get_age_comparison, get_regional_comparison
+from app.services.age_benchmark import get_age_comparison, get_occupation_comparison, get_regional_comparison
 from app.services.postcode_lookup import get_region_from_postcode
 
 router = APIRouter(prefix="/profile", tags=["profile"])
@@ -91,6 +91,7 @@ def get_profile_comparison(
     salary_benchmarks = db.query(AgeBenchmarkSalary).order_by(AgeBenchmarkSalary.min_age).all()
     pension_benchmarks = db.query(AgeBenchmarkPension).order_by(AgeBenchmarkPension.min_age).all()
     regional_benchmarks = db.query(RegionalSalaryBenchmark).all()
+    occupation_benchmarks = db.query(OccupationSalaryBenchmark).all()
 
     income_sources = db.query(IncomeSource).filter_by(user_id=current_user.id, is_active=True).all()
     annual_salary = sum(s.gross_annual_salary for s in income_sources)
@@ -113,10 +114,16 @@ def get_profile_comparison(
         current_annual_salary=annual_salary,
         regional_benchmarks=regional_benchmarks,
     )
+    occupation_result = get_occupation_comparison(
+        soc_code=current_user.soc_code,
+        current_annual_salary=annual_salary,
+        occupation_benchmarks=occupation_benchmarks,
+    )
 
     return AgeComparisonOut(
         **dataclasses.asdict(age_result),
         **dataclasses.asdict(regional_result),
+        **dataclasses.asdict(occupation_result),
         current_monthly_salary=monthly_salary,
         current_annual_salary=annual_salary,
         current_pension_pot=pension_pot,

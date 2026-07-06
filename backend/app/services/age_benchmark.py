@@ -1,5 +1,5 @@
 """
-Age-based and regional salary benchmark comparison service.
+Age-based, regional, and occupation salary benchmark comparison service.
 Pure functions — no database access. Accept pre-fetched benchmark rows so
 they can be unit-tested with plain SimpleNamespace objects.
 """
@@ -63,6 +63,27 @@ class RegionalComparisonResult:
     region_source: str | None
     region_source_notes: str | None
     is_london: bool                            # drives the London caveat note
+
+
+# ── Occupation benchmark types ────────────────────────────────────────────────
+
+class OccupationBenchmark(Protocol):
+    soc_code: str
+    soc_level: int
+    soc_group_description: str
+    median_annual_salary: float
+    source: str
+    source_notes: str
+
+
+@dataclass
+class OccupationComparisonResult:
+    occupation_soc_group_description: str | None
+    occupation_median_annual_salary: float | None
+    salary_vs_occupation_pct: float | None
+    occupation_match_level: int | None          # 1 or 2, or None when no match
+    occupation_source: str | None
+    occupation_source_notes: str | None
 
 
 # ── Age calculation helpers ───────────────────────────────────────────────────
@@ -197,4 +218,65 @@ def get_regional_comparison(
         region_source=benchmark.source,
         region_source_notes=benchmark.source_notes,
         is_london=region == "London",
+    )
+
+
+def get_occupation_comparison(
+    soc_code: str | None,
+    current_annual_salary: float,
+    occupation_benchmarks,   # iterable of OccupationBenchmark-like objects
+) -> OccupationComparisonResult:
+    """
+    Compare a user's annual salary against the ONS occupation-group median.
+
+    Matching strategy:
+      1. Try 2-digit prefix of soc_code against soc_level=2 rows (preferred).
+      2. Fall back to 1-digit prefix against soc_level=1 rows.
+      3. If soc_code is None or no match found, return all nulls.
+    """
+    null_result = OccupationComparisonResult(
+        occupation_soc_group_description=None,
+        occupation_median_annual_salary=None,
+        salary_vs_occupation_pct=None,
+        occupation_match_level=None,
+        occupation_source=None,
+        occupation_source_notes=None,
+    )
+
+    if not soc_code:
+        return null_result
+
+    prefix2 = soc_code[:2] if len(soc_code) >= 2 else None
+    prefix1 = soc_code[:1]
+
+    level2_map: dict[str, OccupationBenchmark] = {}
+    level1_map: dict[str, OccupationBenchmark] = {}
+    for b in occupation_benchmarks:
+        if b.soc_level == 2:
+            level2_map[b.soc_code] = b
+        elif b.soc_level == 1:
+            level1_map[b.soc_code] = b
+
+    matched = None
+    match_level = None
+    if prefix2 and prefix2 in level2_map:
+        matched = level2_map[prefix2]
+        match_level = 2
+    elif prefix1 in level1_map:
+        matched = level1_map[prefix1]
+        match_level = 1
+
+    if matched is None:
+        return null_result
+
+    median = matched.median_annual_salary
+    pct = round(current_annual_salary / median * 100, 1) if median > 0 else None
+
+    return OccupationComparisonResult(
+        occupation_soc_group_description=matched.soc_group_description,
+        occupation_median_annual_salary=median,
+        salary_vs_occupation_pct=pct,
+        occupation_match_level=match_level,
+        occupation_source=matched.source,
+        occupation_source_notes=matched.source_notes,
     )

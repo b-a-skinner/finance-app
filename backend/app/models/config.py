@@ -102,3 +102,22 @@ class OccupationCode(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     soc_code: Mapped[str] = mapped_column(String(10), nullable=False)
     soc_group: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class OccupationSalaryBenchmark(Base):
+    """UK median annual salary by SOC group (ONS ASHE 2025).
+
+    soc_level=2 rows cover 2-digit SOC sub-major groups (preferred match).
+    soc_level=1 rows cover 1-digit SOC major groups (fallback).
+    soc_code stores the 1- or 2-digit code as a string.
+    """
+
+    __tablename__ = "occupation_salary_benchmark"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    soc_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    soc_level: Mapped[int] = mapped_column(Integer, nullable=False)   # 1 or 2
+    soc_group_description: Mapped[str] = mapped_column(String(255), nullable=False)
+    median_annual_salary: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_notes: Mapped[str] = mapped_column(String(255), nullable=False)

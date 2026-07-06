@@ -299,3 +299,10 @@ class AgeComparisonOut(BaseModel):
     region_source: str | None
     region_source_notes: str | None
     is_london: bool
+    # Occupation salary
+    occupation_soc_group_description: str | None
+    occupation_median_annual_salary: float | None
+    salary_vs_occupation_pct: float | None
+    occupation_match_level: int | None
+    occupation_source: str | None
+    occupation_source_notes: str | None

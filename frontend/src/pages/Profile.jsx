@@ -58,6 +58,8 @@ function HowYouCompare({ cmp, dobSet, postcodeSet }) {
     region, median_annual_salary_for_region, salary_vs_region_pct,
     region_source, region_source_notes, is_london,
     current_annual_salary,
+    occupation_soc_group_description, occupation_median_annual_salary, salary_vs_occupation_pct,
+    occupation_source, occupation_source_notes,
   } = cmp;
 
   const regionLabel = region ?? 'the UK overall';
@@ -145,6 +147,22 @@ function HowYouCompare({ cmp, dobSet, postcodeSet }) {
           </p>
         )}
       </BenchmarkRow>
+
+      {/* Occupation salary — only shown when a SOC match exists */}
+      {occupation_soc_group_description && (
+        <BenchmarkRow label="Occupation">
+          <>
+            <p className="benchmark-text">
+              Your gross annual salary of <strong>{gbp(current_annual_salary)}</strong> is{' '}
+              <strong>{comparisonWord(salary_vs_occupation_pct)}</strong> the median of{' '}
+              <strong>{gbp(occupation_median_annual_salary)}</strong> for{' '}
+              {occupation_soc_group_description}
+              {salary_vs_occupation_pct !== null && ` (${gapPct(salary_vs_occupation_pct)})`}.
+            </p>
+            <p className="benchmark-source">{occupation_source} · {occupation_source_notes}</p>
+          </>
+        </BenchmarkRow>
+      )}
     </div>
   );
 }

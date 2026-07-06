@@ -112,6 +112,21 @@ function PostcodePromptSlide() {
   );
 }
 
+function OccupationSlide({ cmp }) {
+  const notes = [cmp.occupation_source, cmp.occupation_source_notes].filter(Boolean).join(' · ');
+  return (
+    <SlideLayout
+      line1={<>
+        <strong>{cmp.occupation_soc_group_description}</strong>: median salary is{' '}
+        <strong>{gbp(cmp.occupation_median_annual_salary)}/year</strong>
+        {' · '}Your <strong>{gbp(cmp.current_annual_salary)}/year</strong>{' '}
+        is <strong>{pctDiff(cmp.salary_vs_occupation_pct)}</strong> the occupation median
+      </>}
+      line2={notes || null}
+    />
+  );
+}
+
 function buildSlides(cmp, dobSet, postcodeSet, hasIncome) {
   const slides = [];
 
@@ -141,6 +156,10 @@ function buildSlides(cmp, dobSet, postcodeSet, hasIncome) {
     } else {
       slides.push(<NoPensionSlide key="no-pension" />);
     }
+  }
+
+  if (cmp.occupation_soc_group_description && hasIncome) {
+    slides.push(<OccupationSlide key="occupation" cmp={cmp} />);
   }
 
   return slides;
