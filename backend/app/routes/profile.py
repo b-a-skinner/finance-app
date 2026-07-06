@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, IncomeSource, OccupationSalaryBenchmark, PensionPot, RegionalSalaryBenchmark
+from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, IncomeSource, OccupationCode, OccupationSalaryBenchmark, PensionPot, RegionalSalaryBenchmark
 from app.models.user import User
 from app.routes.auth import get_current_user
 from app.schemas import AgeComparisonOut, OnboardingOut, OnboardingUpdate, OccupationOut, ProfileOut, ProfileUpdate
@@ -114,8 +114,14 @@ def get_profile_comparison(
         current_annual_salary=annual_salary,
         regional_benchmarks=regional_benchmarks,
     )
+    occ_record = (
+        db.query(OccupationCode)
+        .filter(OccupationCode.title == current_user.occupation)
+        .first()
+        if current_user.occupation else None
+    )
     occupation_result = get_occupation_comparison(
-        soc_code=current_user.soc_code,
+        soc_code=occ_record.soc_code if occ_record else None,
         current_annual_salary=annual_salary,
         occupation_benchmarks=occupation_benchmarks,
     )
