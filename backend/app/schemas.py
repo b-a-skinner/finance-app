@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -309,3 +310,57 @@ class AgeComparisonOut(BaseModel):
     occupation_match_level: int | None
     occupation_source: str | None
     occupation_source_notes: str | None
+
+
+# ---------------------------------------------------------------------------
+# Business
+# ---------------------------------------------------------------------------
+
+class BusinessIncomeCreate(BaseModel):
+    amount: float
+    date_received: date
+    description: str | None = None
+
+
+class BusinessIncomeUpdate(BaseModel):
+    amount: float | None = None
+    date_received: date | None = None
+    description: str | None = None
+
+
+class BusinessIncomeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    amount: float
+    date_received: date
+    description: str | None
+
+
+class BusinessExpenseCreate(BaseModel):
+    amount: float
+    date_incurred: date
+    category: str
+    description: str | None = None
+
+
+class BusinessExpenseUpdate(BaseModel):
+    amount: float | None = None
+    date_incurred: date | None = None
+    category: str | None = None
+    description: str | None = None
+
+
+class BusinessExpenseOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    amount: float
+    date_incurred: date
+    category: str
+    description: str | None
+
+
+class BusinessSummaryOut(BaseModel):
+    revenue_ytd: float
+    expenses_ytd: float
+    estimated_profit: float
+    has_business_data: bool

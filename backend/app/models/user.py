@@ -9,7 +9,7 @@ from app.models.base import TimestampMixin
 
 if TYPE_CHECKING:
     # Imported only for static analysis — avoids circular imports at runtime
-    from app.models.finance import Asset, Debt, Expense, IncomeSource, PensionPot, SavingsGoal
+    from app.models.finance import Asset, BusinessExpense, BusinessIncome, Debt, Expense, IncomeSource, PensionPot, SavingsGoal
 
 
 class User(TimestampMixin, Base):
@@ -36,3 +36,5 @@ class User(TimestampMixin, Base):
     savings_goals: Mapped[list["SavingsGoal"]] = relationship(back_populates="user")
     pension_pots: Mapped[list["PensionPot"]] = relationship(back_populates="user")
     assets: Mapped[list["Asset"]] = relationship(back_populates="user")
+    business_income: Mapped[list["BusinessIncome"]] = relationship(back_populates="user")
+    business_expenses: Mapped[list["BusinessExpense"]] = relationship(back_populates="user")

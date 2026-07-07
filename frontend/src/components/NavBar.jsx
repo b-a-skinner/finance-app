@@ -10,6 +10,7 @@ const NAV_LINKS = [
   { to: '/savings', label: 'Savings & Investments', shortLabel: 'Savings' },
   { to: '/pension', label: 'Pension' },
   { to: '/assets', label: 'Assets' },
+  { to: '/business', label: 'Business' },
   { to: '/profile', label: 'Profile' },
 ];
 

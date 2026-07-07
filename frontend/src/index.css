@@ -1943,3 +1943,45 @@ button.checklist-link {
   from { transform: translateY(100%); }
   to   { transform: translateY(0); }
 }
+
+/* ── Business section ──────────────────────────────────────────────────────── */
+
+.business-summary-grid {
+  margin-bottom: 1.5rem;
+}
+
+.business-metric {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+.business-metric--positive { color: var(--color-positive); }
+.business-metric--negative { color: var(--color-negative); }
+
+.business-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.business-activity-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.business-amount {
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.business-amount--income  { color: var(--color-positive); }
+.business-amount--expense { color: var(--color-negative); }

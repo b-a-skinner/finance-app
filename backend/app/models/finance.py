@@ -1,8 +1,8 @@
 import enum
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -129,3 +129,41 @@ class FinancialSnapshot(TimestampMixin, Base):
     total_debt_balance: Mapped[float] = mapped_column(Float, nullable=False)
     pension_pot_balance: Mapped[float] = mapped_column(Float, nullable=False)
     months_of_runway: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+
+class BusinessExpenseCategory(str, enum.Enum):
+    equipment = "equipment"
+    software = "software"
+    travel = "travel"
+    office = "office"
+    professional_fees = "professional_fees"
+    training = "training"
+    marketing = "marketing"
+    other = "other"
+
+
+class BusinessIncome(TimestampMixin, Base):
+    __tablename__ = "business_income"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    date_received: Mapped[date] = mapped_column(Date, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="business_income")
+
+
+class BusinessExpense(TimestampMixin, Base):
+    __tablename__ = "business_expenses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    date_incurred: Mapped[date] = mapped_column(Date, nullable=False)
+    category: Mapped[BusinessExpenseCategory] = mapped_column(SAEnum(BusinessExpenseCategory), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="business_expenses")
