@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useResource } from '../hooks/useResource';
 import { gbp } from '../utils/format';
 
-const EMPTY = { name: '', current_balance: '', target_amount: '', monthly_contribution: '', account_type: '' };
+const EMPTY = { current_balance: '', target_amount: '', monthly_contribution: '', account_type: '' };
 
 const ACCOUNT_TYPE_OPTIONS = [
   { value: 'cash_savings',       label: 'Cash savings' },
@@ -139,7 +139,6 @@ export default function Savings() {
     setEditingId(item.id);
     setFormOpen(true);
     setForm({
-      name: item.name,
       current_balance: item.current_balance,
       target_amount: item.target_amount ?? '',
       monthly_contribution: item.monthly_contribution,
@@ -163,13 +162,11 @@ export default function Savings() {
     const target = form.target_amount !== '' ? parseFloat(form.target_amount) : null;
     const contrib = parseFloat(form.monthly_contribution);
 
-    if (!form.name.trim()) { setFormError('Name is required.'); return; }
     if (isNaN(current) || current < 0) { setFormError('Enter a valid current balance.'); return; }
     if (target !== null && (isNaN(target) || target < 0)) { setFormError('Enter a valid target amount.'); return; }
     if (isNaN(contrib) || contrib < 0) { setFormError('Enter a valid monthly contribution.'); return; }
 
     const data = {
-      name: form.name.trim(),
       current_balance: current,
       target_amount: target,
       monthly_contribution: contrib,
@@ -224,16 +221,6 @@ export default function Savings() {
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="sav-name">Name</label>
-                <input
-                  id="sav-name"
-                  type="text"
-                  value={form.name}
-                  onChange={e => field('name', e.target.value)}
-                  placeholder="e.g. Emergency fund, Stocks &amp; Shares ISA"
-                />
               </div>
               <div className="form-group">
                 <label htmlFor="sav-balance">Current balance (£)</label>
@@ -301,10 +288,7 @@ export default function Savings() {
                     <li key={item.id} className={`item-row item-row--savings${editingId === item.id ? ' item-row--editing' : ''}`}>
                       <div className="item-info">
                         <span className="item-name">
-                          {item.name}
-                          {item.account_type && (
-                            <span className="badge badge-neutral">{ACCOUNT_TYPE_LABEL[item.account_type] ?? item.account_type}</span>
-                          )}
+                          {item.account_type ? (ACCOUNT_TYPE_LABEL[item.account_type] ?? item.account_type) : 'Savings'}
                         </span>
                         <span className="item-detail">
                           {hasTarget

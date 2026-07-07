@@ -119,7 +119,7 @@ class DebtRepaymentProjectionOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 class SavingsCreate(BaseModel):
-    name: str
+    name: str = ""
     current_balance: float
     target_amount: float | None = None
     monthly_contribution: float

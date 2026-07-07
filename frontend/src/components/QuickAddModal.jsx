@@ -44,7 +44,7 @@ function ModalShell({ title, moreHref, onClose, children }) {
 
 function SavingsModal({ onClose, onSuccess }) {
   const { apiFetch } = useAuth();
-  const [form, setForm] = useState({ account_type: '', name: '', current_balance: '', monthly_contribution: '', target_amount: '' });
+  const [form, setForm] = useState({ account_type: '', current_balance: '', monthly_contribution: '', target_amount: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -56,7 +56,6 @@ function SavingsModal({ onClose, onSuccess }) {
     const balance = parseFloat(form.current_balance);
     const contrib = form.monthly_contribution !== '' ? parseFloat(form.monthly_contribution) : 0;
     const target  = form.target_amount !== '' ? parseFloat(form.target_amount) : null;
-    if (!form.name.trim()) { setError('Name is required.'); return; }
     if (isNaN(balance) || balance < 0) { setError('Enter a valid balance.'); return; }
     if (!isNaN(contrib) && contrib < 0) { setError('Enter a valid monthly contribution.'); return; }
     setSaving(true);
@@ -64,7 +63,6 @@ function SavingsModal({ onClose, onSuccess }) {
       const res = await apiFetch('/api/savings', {
         method: 'POST',
         body: JSON.stringify({
-          name: form.name.trim(),
           current_balance: balance,
           monthly_contribution: isNaN(contrib) ? 0 : contrib,
           target_amount: target !== null && !isNaN(target) && target >= 0 ? target : null,
@@ -89,10 +87,6 @@ function SavingsModal({ onClose, onSuccess }) {
             <option value="">Select type…</option>
             {ACCOUNT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
-        </div>
-        <div className="form-group">
-          <label htmlFor="qa-sav-name">Name</label>
-          <input id="qa-sav-name" type="text" value={form.name} onChange={e => field('name', e.target.value)} placeholder="e.g. Emergency fund" autoFocus />
         </div>
         <div className="form-group">
           <label htmlFor="qa-sav-balance">Current balance (£)</label>
