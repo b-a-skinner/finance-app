@@ -92,6 +92,7 @@ class PensionPot(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     current_balance: Mapped[float] = mapped_column(Float, nullable=False)
     employee_contribution_pct: Mapped[float] = mapped_column(Float, nullable=False)
     employer_contribution_pct: Mapped[float] = mapped_column(Float, nullable=False)

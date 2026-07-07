@@ -130,12 +130,9 @@ def get_financial_summary(
     loan_plans = [d.student_loan_plan for d in student_loan_debts if d.student_loan_plan is not None]
 
     # ---- Pension ----
-    # First active pot drives contribution percentages for the take-home calculation.
-    # All active pots are summed for the balance / net worth figures.
     all_pension_pots = db.query(PensionPot).filter_by(user_id=user_id, is_active=True).all()
-    first_pension = all_pension_pots[0] if all_pension_pots else None
-    employee_pct = first_pension.employee_contribution_pct if first_pension else 0.0
-    employer_pct = first_pension.employer_contribution_pct if first_pension else 0.0
+    employee_pct = sum(p.employee_contribution_pct for p in all_pension_pots)
+    employer_pct = sum(p.employer_contribution_pct for p in all_pension_pots)
 
     breakdown = calculate_take_home_pay(gross, tax_config, loan_plans, employee_pct, employer_pct)
 

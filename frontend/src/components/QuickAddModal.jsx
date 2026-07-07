@@ -91,7 +91,7 @@ function SavingsModal({ onClose, onSuccess }) {
           </select>
         </div>
         <div className="form-group">
-          <label htmlFor="qa-sav-name">Name / label</label>
+          <label htmlFor="qa-sav-name">Name</label>
           <input id="qa-sav-name" type="text" value={form.name} onChange={e => field('name', e.target.value)} placeholder="e.g. Emergency fund" autoFocus />
         </div>
         <div className="form-group">
@@ -114,7 +114,7 @@ function SavingsModal({ onClose, onSuccess }) {
 
 function PensionModal({ onClose, onSuccess }) {
   const { apiFetch } = useAuth();
-  const [form, setForm] = useState({ current_balance: '', employee_contribution_pct: '', employer_contribution_pct: '' });
+  const [form, setForm] = useState({ name: '', current_balance: '', employee_contribution_pct: '', employer_contribution_pct: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -133,7 +133,7 @@ function PensionModal({ onClose, onSuccess }) {
     try {
       const res = await apiFetch('/api/pension', {
         method: 'POST',
-        body: JSON.stringify({ current_balance: balance, employee_contribution_pct: emp, employer_contribution_pct: er }),
+        body: JSON.stringify({ name: form.name.trim() || null, current_balance: balance, employee_contribution_pct: emp, employer_contribution_pct: er }),
       });
       if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.detail || 'Failed to save.'); }
       onSuccess();
@@ -148,8 +148,12 @@ function PensionModal({ onClose, onSuccess }) {
       <form onSubmit={handleSubmit} className="qa-form">
         {error && <p className="qa-error">{error}</p>}
         <div className="form-group">
+          <label htmlFor="qa-pen-name">Name <span className="form-hint-inline">(optional)</span></label>
+          <input id="qa-pen-name" type="text" value={form.name} onChange={e => field('name', e.target.value)} placeholder="e.g. Aviva workplace pension" autoFocus />
+        </div>
+        <div className="form-group">
           <label htmlFor="qa-pen-balance">Current pot value (£)</label>
-          <input id="qa-pen-balance" type="number" min="0" step="0.01" value={form.current_balance} onChange={e => field('current_balance', e.target.value)} placeholder="e.g. 15000" autoFocus />
+          <input id="qa-pen-balance" type="number" min="0" step="0.01" value={form.current_balance} onChange={e => field('current_balance', e.target.value)} placeholder="e.g. 15000" />
         </div>
         <div className="form-group">
           <label htmlFor="qa-pen-ee">Your contribution (%)</label>
@@ -206,8 +210,8 @@ function AssetModal({ onClose, onSuccess }) {
           </select>
         </div>
         <div className="form-group">
-          <label htmlFor="qa-asset-name">Name / label</label>
-          <input id="qa-asset-name" type="text" value={form.name} onChange={e => field('name', e.target.value)} placeholder="e.g. Family home, Car" autoFocus />
+          <label htmlFor="qa-asset-name">Name</label>
+          <input id="qa-asset-name" type="text" value={form.name} onChange={e => field('name', e.target.value)} placeholder="e.g. Home, Car" autoFocus />
         </div>
         <div className="form-group">
           <label htmlFor="qa-asset-value">Current value (£)</label>
@@ -353,8 +357,8 @@ function ExpenseModal({ onClose, onSuccess }) {
       <form onSubmit={handleSubmit} className="qa-form">
         {error && <p className="qa-error">{error}</p>}
         <div className="form-group">
-          <label htmlFor="qa-exp-cat">Category</label>
-          <input id="qa-exp-cat" type="text" value={form.category} onChange={e => field('category', e.target.value)} placeholder="e.g. Rent, Groceries, Utilities" autoFocus />
+          <label htmlFor="qa-exp-cat">Name</label>
+          <input id="qa-exp-cat" type="text" value={form.category} onChange={e => field('category', e.target.value)} placeholder="e.g. Rent, Groceries" autoFocus />
         </div>
         <div className="form-group">
           <label htmlFor="qa-exp-amount">Amount (£)</label>

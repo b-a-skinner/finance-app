@@ -162,12 +162,14 @@ class SavingsProjectionOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 class PensionCreate(BaseModel):
+    name: str | None = None
     current_balance: float
     employee_contribution_pct: float
     employer_contribution_pct: float
 
 
 class PensionUpdate(BaseModel):
+    name: str | None = None
     current_balance: float | None = None
     employee_contribution_pct: float | None = None
     employer_contribution_pct: float | None = None
@@ -176,6 +178,7 @@ class PensionUpdate(BaseModel):
 class PensionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    name: str | None
     current_balance: float
     employee_contribution_pct: float
     employer_contribution_pct: float

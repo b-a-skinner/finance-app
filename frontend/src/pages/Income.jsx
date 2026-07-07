@@ -88,7 +88,7 @@ export default function Income() {
             {formError && <div className="error-banner">{formError}</div>}
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label htmlFor="inc-label">Label</label>
+                <label htmlFor="inc-label">Name</label>
                 <input
                   id="inc-label"
                   type="text"

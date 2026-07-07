@@ -93,16 +93,6 @@ export default function Assets() {
             {formError && <div className="error-banner">{formError}</div>}
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label htmlFor="asset-name">Name</label>
-                <input
-                  id="asset-name"
-                  type="text"
-                  value={form.name}
-                  onChange={e => field('name', e.target.value)}
-                  placeholder="e.g. Family home, Car"
-                />
-              </div>
-              <div className="form-group">
                 <label htmlFor="asset-type">Type</label>
                 <select
                   id="asset-type"
@@ -113,6 +103,16 @@ export default function Assets() {
                   <option value="vehicle">Vehicle</option>
                   <option value="other">Other</option>
                 </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="asset-name">Name</label>
+                <input
+                  id="asset-name"
+                  type="text"
+                  value={form.name}
+                  onChange={e => field('name', e.target.value)}
+                  placeholder="e.g. Home, Car"
+                />
               </div>
               <div className="form-group">
                 <label htmlFor="asset-value">Current value (£)</label>

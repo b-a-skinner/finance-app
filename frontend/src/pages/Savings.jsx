@@ -226,13 +226,13 @@ export default function Savings() {
                 </select>
               </div>
               <div className="form-group">
-                <label htmlFor="sav-name">Account name</label>
+                <label htmlFor="sav-name">Name</label>
                 <input
                   id="sav-name"
                   type="text"
                   value={form.name}
                   onChange={e => field('name', e.target.value)}
-                  placeholder="e.g. Emergency fund, Vanguard ISA"
+                  placeholder="e.g. Emergency fund, Stocks &amp; Shares ISA"
                 />
               </div>
               <div className="form-group">

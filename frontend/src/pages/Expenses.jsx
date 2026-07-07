@@ -89,13 +89,13 @@ export default function Expenses() {
             {formError && <div className="error-banner">{formError}</div>}
             <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label htmlFor="exp-cat">Category</label>
+                <label htmlFor="exp-cat">Name</label>
                 <input
                   id="exp-cat"
                   type="text"
                   value={form.category}
                   onChange={e => field('category', e.target.value)}
-                  placeholder="e.g. Rent, Groceries, Utilities"
+                  placeholder="e.g. Rent, Groceries"
                 />
               </div>
               <div className="form-group">

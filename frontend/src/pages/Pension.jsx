@@ -2,7 +2,7 @@ import { useState } from 'react';
 import NavBar from '../components/NavBar';
 import { useResource } from '../hooks/useResource';
 
-const EMPTY = { current_balance: '', employee_contribution_pct: '', employer_contribution_pct: '' };
+const EMPTY = { name: '', current_balance: '', employee_contribution_pct: '', employer_contribution_pct: '' };
 
 import { gbp } from '../utils/format';
 
@@ -23,6 +23,7 @@ export default function Pension() {
     setEditingId(item.id);
     setFormOpen(true);
     setForm({
+      name: item.name || '',
       current_balance: item.current_balance,
       employee_contribution_pct: item.employee_contribution_pct,
       employer_contribution_pct: item.employer_contribution_pct,
@@ -50,6 +51,7 @@ export default function Pension() {
     if (isNaN(empEr) || empEr < 0 || empEr > 100) { setFormError('Employer contribution must be 0–100%.'); return; }
 
     const data = {
+      name: form.name.trim() || null,
       current_balance: balance,
       employee_contribution_pct: empEe,
       employer_contribution_pct: empEr,
@@ -90,6 +92,16 @@ export default function Pension() {
             <p className="card-title">{editingId ? 'Edit pension pot' : 'Add pension pot'}</p>
             {formError && <div className="error-banner">{formError}</div>}
             <form onSubmit={handleSubmit}>
+              <div className="form-group">
+                <label htmlFor="pen-name">Name <span className="form-hint-inline">(optional)</span></label>
+                <input
+                  id="pen-name"
+                  type="text"
+                  value={form.name}
+                  onChange={e => field('name', e.target.value)}
+                  placeholder="e.g. Aviva workplace pension"
+                />
+              </div>
               <div className="form-group">
                 <label htmlFor="pen-balance">Current pot value (£)</label>
                 <input
@@ -154,9 +166,9 @@ export default function Pension() {
                 {items.map(item => (
                   <li key={item.id} className={`item-row${editingId === item.id ? ' item-row--editing' : ''}`}>
                     <div className="item-info">
-                      <span className="item-name">{gbp(item.current_balance)} pot value</span>
+                      <span className="item-name">{item.name || 'Pension'}</span>
                       <span className="item-detail">
-                        You: {item.employee_contribution_pct}% · Employer: {item.employer_contribution_pct}%
+                        {gbp(item.current_balance)} · You: {item.employee_contribution_pct}% · Employer: {item.employer_contribution_pct}%
                         &nbsp;({item.employee_contribution_pct + item.employer_contribution_pct}% total)
                       </span>
                     </div>
