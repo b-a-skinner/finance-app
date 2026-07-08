@@ -175,7 +175,7 @@ class BusinessExpense(TimestampMixin, Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     date_incurred: Mapped[date] = mapped_column(Date, nullable=False)
-    category: Mapped[BusinessExpenseCategory] = mapped_column(SAEnum(BusinessExpenseCategory), nullable=False)
+    category: Mapped[str] = mapped_column(String(50), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_allowable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
