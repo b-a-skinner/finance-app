@@ -51,10 +51,18 @@ body {
   flex-shrink: 0;
 }
 
-/* Hide desktop pill on mobile — mobile menu has its own */
+/* On mobile, float the pill to the center of the bar between logo and hamburger */
 @media (max-width: 767px) {
   .navbar-left .mode-pill {
-    display: none;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* Slightly tighter pill text/padding so logo + pill + hamburger fit at 375px */
+  .navbar-left .mode-pill .mode-pill-btn {
+    font-size: 0.7rem;
+    padding: 0.18rem 0.5rem;
   }
 }
 
@@ -2033,11 +2041,6 @@ button.checklist-link {
   border-radius: 20px;
   padding: 3px;
   gap: 0;
-}
-
-.mode-pill--mobile {
-  margin: 0.5rem 1rem;
-  align-self: flex-start;
 }
 
 .mode-pill-btn {

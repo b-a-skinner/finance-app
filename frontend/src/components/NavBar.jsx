@@ -106,22 +106,6 @@ export default function NavBar() {
       {/* Mobile dropdown */}
       {open && (
         <div className="navbar-mobile-menu">
-          {activeMode && (
-            <div className="mode-pill mode-pill--mobile">
-              <button
-                className={`mode-pill-btn${activeMode === 'personal' ? ' mode-pill-btn--active' : ''}`}
-                onClick={() => { handleModeSwitch('personal'); setOpen(false); }}
-              >
-                Personal
-              </button>
-              <button
-                className={`mode-pill-btn${activeMode === 'business' ? ' mode-pill-btn--active' : ''}`}
-                onClick={() => { handleModeSwitch('business'); setOpen(false); }}
-              >
-                Business
-              </button>
-            </div>
-          )}
           {navLinks.map(({ to, label }) => (
             <Link key={to} to={to} onClick={() => setOpen(false)}>
               {label}
