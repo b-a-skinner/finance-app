@@ -348,6 +348,7 @@ class BusinessExpenseCreate(BaseModel):
     date_incurred: date
     category: str
     description: str | None = None
+    is_allowable: bool = True
 
 
 class BusinessExpenseUpdate(BaseModel):
@@ -355,6 +356,7 @@ class BusinessExpenseUpdate(BaseModel):
     date_incurred: date | None = None
     category: str | None = None
     description: str | None = None
+    is_allowable: bool | None = None
 
 
 class BusinessExpenseOut(BaseModel):
@@ -364,10 +366,13 @@ class BusinessExpenseOut(BaseModel):
     date_incurred: date
     category: str
     description: str | None
+    is_allowable: bool
 
 
 class BusinessSummaryOut(BaseModel):
     revenue_ytd: float
-    expenses_ytd: float
-    estimated_profit: float
+    total_expenses_ytd: float
+    allowable_expenses_ytd: float
+    cash_profit: float
+    taxable_profit: float
     has_business_data: bool

@@ -74,7 +74,7 @@ class TestBusinessIncomeCRUD:
 
 
 # ---------------------------------------------------------------------------
-# Expense CRUD
+# Expense CRUD + allowability
 # ---------------------------------------------------------------------------
 
 class TestBusinessExpenseCRUD:
@@ -88,6 +88,32 @@ class TestBusinessExpenseCRUD:
         body = r.json()
         assert body["amount"] == 299.0
         assert body["category"] == "software"
+
+    def test_create_includes_is_allowable(self, client):
+        h = auth(client)
+        r = client.post(EXPENSE_URL, json={**self.CREATE, "is_allowable": True}, headers=h)
+        assert r.status_code == 201
+        assert r.json()["is_allowable"] is True
+
+    def test_create_non_allowable(self, client):
+        h = auth(client)
+        payload = {"amount": 150.0, "date_incurred": TODAY, "category": "client_entertainment", "is_allowable": False}
+        r = client.post(EXPENSE_URL, json=payload, headers=h)
+        assert r.status_code == 201
+        assert r.json()["is_allowable"] is False
+
+    def test_default_is_allowable_true(self, client):
+        """is_allowable defaults to True when omitted."""
+        h = auth(client)
+        r = client.post(EXPENSE_URL, json=self.CREATE, headers=h)
+        assert r.json()["is_allowable"] is True
+
+    def test_update_is_allowable(self, client):
+        h = auth(client)
+        item_id = client.post(EXPENSE_URL, json=self.CREATE, headers=h).json()["id"]
+        r = client.patch(f"{EXPENSE_URL}/{item_id}", json={"is_allowable": False}, headers=h)
+        assert r.status_code == 200
+        assert r.json()["is_allowable"] is False
 
     def test_list(self, client):
         h = auth(client)
@@ -117,9 +143,17 @@ class TestBusinessExpenseCRUD:
         assert client.patch(f"{EXPENSE_URL}/{item_id}", json=self.UPDATE, headers=bob).status_code == 404
         assert client.delete(f"{EXPENSE_URL}/{item_id}", headers=bob).status_code == 404
 
+    def test_new_categories_accepted(self, client):
+        h = auth(client)
+        for cat in ("insurance", "staff_costs", "phone_internet", "pension_employer",
+                    "bank_charges", "client_entertainment", "fines", "personal",
+                    "political", "home_office"):
+            r = client.post(EXPENSE_URL, json={"amount": 10.0, "date_incurred": TODAY, "category": cat}, headers=h)
+            assert r.status_code == 201, f"Failed for category: {cat}"
+
 
 # ---------------------------------------------------------------------------
-# Summary — YTD and tax year boundary
+# Summary — YTD, tax year boundary, allowable split
 # ---------------------------------------------------------------------------
 
 def _this_year_april_6() -> date:
@@ -134,8 +168,10 @@ class TestBusinessSummary:
         assert r.status_code == 200
         body = r.json()
         assert body["revenue_ytd"] == 0.0
-        assert body["expenses_ytd"] == 0.0
-        assert body["estimated_profit"] == 0.0
+        assert body["total_expenses_ytd"] == 0.0
+        assert body["allowable_expenses_ytd"] == 0.0
+        assert body["cash_profit"] == 0.0
+        assert body["taxable_profit"] == 0.0
         assert body["has_business_data"] is False
 
     def test_has_data_flag(self, client):
@@ -147,42 +183,68 @@ class TestBusinessSummary:
     def test_ytd_sums_current_year_only(self, client):
         h = auth(client)
         tax_start = _this_year_april_6()
-
-        # In current tax year
         within = tax_start.isoformat()
-        # Before current tax year (previous tax year)
         before = (tax_start - timedelta(days=1)).isoformat()
 
         client.post(INCOME_URL, json={"amount": 1000.0, "date_received": within}, headers=h)
         client.post(INCOME_URL, json={"amount": 500.0, "date_received": before}, headers=h)
-        client.post(EXPENSE_URL, json={"amount": 200.0, "date_incurred": within, "category": "software"}, headers=h)
+        client.post(EXPENSE_URL, json={"amount": 200.0, "date_incurred": within, "category": "software", "is_allowable": True}, headers=h)
         client.post(EXPENSE_URL, json={"amount": 100.0, "date_incurred": before, "category": "travel"}, headers=h)
 
         body = client.get(SUMMARY_URL, headers=h).json()
         assert body["revenue_ytd"] == pytest.approx(1000.0)
-        assert body["expenses_ytd"] == pytest.approx(200.0)
-        assert body["estimated_profit"] == pytest.approx(800.0)
+        assert body["total_expenses_ytd"] == pytest.approx(200.0)
+        assert body["cash_profit"] == pytest.approx(800.0)
         assert body["has_business_data"] is True
+
+    def test_allowable_vs_non_allowable_split(self, client):
+        h = auth(client)
+        tax_start = _this_year_april_6()
+        d = tax_start.isoformat()
+
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
+        # Allowable: 300 + 500 = 800
+        client.post(EXPENSE_URL, json={"amount": 300.0, "date_incurred": d, "category": "software", "is_allowable": True}, headers=h)
+        client.post(EXPENSE_URL, json={"amount": 500.0, "date_incurred": d, "category": "equipment", "is_allowable": True}, headers=h)
+        # Non-allowable: 200
+        client.post(EXPENSE_URL, json={"amount": 200.0, "date_incurred": d, "category": "client_entertainment", "is_allowable": False}, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_expenses_ytd"] == pytest.approx(1000.0)
+        assert body["allowable_expenses_ytd"] == pytest.approx(800.0)
+        assert body["cash_profit"] == pytest.approx(4000.0)      # 5000 - 1000
+        assert body["taxable_profit"] == pytest.approx(4200.0)   # 5000 - 800
+
+    def test_non_allowable_categories_default_flag(self, client):
+        """Client entertainment, fines, personal, political default is_allowable=False
+        only because the frontend sets it — the API stores whatever is sent.
+        Test that explicitly sending False is respected."""
+        h = auth(client)
+        tax_start = _this_year_april_6()
+        d = tax_start.isoformat()
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": d}, headers=h)
+        for cat in ("client_entertainment", "fines", "personal", "political"):
+            client.post(EXPENSE_URL, json={"amount": 100.0, "date_incurred": d, "category": cat, "is_allowable": False}, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_expenses_ytd"] == pytest.approx(400.0)
+        assert body["allowable_expenses_ytd"] == pytest.approx(0.0)
+        assert body["taxable_profit"] == pytest.approx(1000.0)   # no allowable deductions
 
     def test_april_5_falls_in_previous_tax_year(self, client):
         """5 April is the last day of the PREVIOUS tax year — must not appear in YTD."""
         h = auth(client)
         tax_start = _this_year_april_6()
         april_5_this_year = date(tax_start.year, 4, 5)
-
         client.post(INCOME_URL, json={"amount": 999.0, "date_received": april_5_this_year.isoformat()}, headers=h)
-
         body = client.get(SUMMARY_URL, headers=h).json()
-        # april_5 is before the tax year start, so it should not be counted
         assert body["revenue_ytd"] == pytest.approx(0.0)
 
     def test_april_6_falls_in_current_tax_year(self, client):
         """6 April is the FIRST day of the current tax year — must appear in YTD."""
         h = auth(client)
         tax_start = _this_year_april_6()
-
         client.post(INCOME_URL, json={"amount": 999.0, "date_received": tax_start.isoformat()}, headers=h)
-
         body = client.get(SUMMARY_URL, headers=h).json()
         assert body["revenue_ytd"] == pytest.approx(999.0)
 

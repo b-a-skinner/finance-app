@@ -132,14 +132,27 @@ class FinancialSnapshot(TimestampMixin, Base):
 
 
 class BusinessExpenseCategory(str, enum.Enum):
-    equipment = "equipment"
-    software = "software"
-    travel = "travel"
-    office = "office"
+    # Allowable by default
+    equipment         = "equipment"
+    software          = "software"
+    office            = "office"
+    travel            = "travel"
     professional_fees = "professional_fees"
-    training = "training"
-    marketing = "marketing"
-    other = "other"
+    marketing         = "marketing"
+    training          = "training"
+    insurance         = "insurance"
+    staff_costs       = "staff_costs"
+    phone_internet    = "phone_internet"
+    pension_employer  = "pension_employer"
+    bank_charges      = "bank_charges"
+    # Non-allowable by default
+    client_entertainment = "client_entertainment"
+    fines    = "fines"
+    personal = "personal"
+    political = "political"
+    # Dual-purpose — user confirms
+    home_office = "home_office"
+    other       = "other"
 
 
 class BusinessIncome(TimestampMixin, Base):
@@ -164,6 +177,7 @@ class BusinessExpense(TimestampMixin, Base):
     date_incurred: Mapped[date] = mapped_column(Date, nullable=False)
     category: Mapped[BusinessExpenseCategory] = mapped_column(SAEnum(BusinessExpenseCategory), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_allowable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="business_expenses")

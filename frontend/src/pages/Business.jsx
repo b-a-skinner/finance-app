@@ -1,21 +1,40 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import { useAuth } from '../context/AuthContext';
 import { gbp } from '../utils/format';
 
-const CATEGORY_LABEL = {
-  equipment: 'Equipment',
-  software: 'Software',
-  travel: 'Travel',
-  office: 'Office',
-  professional_fees: 'Professional fees',
-  training: 'Training',
-  marketing: 'Marketing',
-  other: 'Other',
+// ---------------------------------------------------------------------------
+// Category metadata — label, default allowability, and per-category tip text
+// ---------------------------------------------------------------------------
+
+const CATEGORY_INFO = {
+  // Allowable by default
+  equipment:         { label: 'Equipment',                        allowable: true,  tip: 'Normally an allowable business expense that reduces your corporation tax.' },
+  software:          { label: 'Software & subscriptions',         allowable: true,  tip: 'Normally an allowable business expense that reduces your corporation tax.' },
+  office:            { label: 'Office costs (rent, utilities)',   allowable: true,  tip: 'Normally an allowable business expense that reduces your corporation tax.' },
+  travel:            { label: 'Business travel',                  allowable: true,  tip: 'Normally an allowable business expense that reduces your corporation tax.' },
+  professional_fees: { label: 'Professional fees',                allowable: true,  tip: 'Normally an allowable business expense that reduces your corporation tax.' },
+  marketing:         { label: 'Marketing & advertising',          allowable: true,  tip: 'Normally an allowable business expense that reduces your corporation tax.' },
+  training:          { label: 'Training',                         allowable: true,  tip: "Training that updates skills for your current work is allowable. Training for a completely new trade usually isn't." },
+  insurance:         { label: 'Insurance',                        allowable: true,  tip: 'Normally an allowable business expense that reduces your corporation tax.' },
+  staff_costs:       { label: 'Staff costs / salaries',           allowable: true,  tip: 'Normally an allowable business expense that reduces your corporation tax.' },
+  phone_internet:    { label: 'Phone & internet (business)',      allowable: true,  tip: 'Normally an allowable business expense that reduces your corporation tax.' },
+  pension_employer:  { label: 'Pension contributions (employer)', allowable: true,  tip: 'Normally an allowable business expense that reduces your corporation tax.' },
+  bank_charges:      { label: 'Bank & finance charges',          allowable: true,  tip: 'Normally an allowable business expense that reduces your corporation tax.' },
+  // Non-allowable by default
+  client_entertainment: { label: 'Client entertainment',         allowable: false, tip: "Client entertainment can be recorded but isn't tax-deductible — HMRC doesn't allow it to reduce your corporation tax." },
+  fines:             { label: 'Fines & penalties',               allowable: false, tip: "Fines and penalties (including parking and speeding) aren't tax-deductible, even if incurred for business." },
+  personal:          { label: 'Personal expenses / drawings',    allowable: false, tip: "Personal expenses and drawings don't reduce your business tax bill." },
+  political:         { label: 'Political donations',             allowable: false, tip: "Political donations aren't allowable business expenses for tax purposes." },
+  // Dual-purpose — user should confirm
+  home_office:       { label: 'Home office',                     allowable: false, tip: "Only the business-use portion is claimable. Many directors use HMRC's £6/week flat rate. Adjust the toggle if you're claiming the business proportion." },
+  other:             { label: 'Other',                           allowable: false, tip: 'Check with your accountant whether this expense is allowable for corporation tax.' },
 };
 
-const CATEGORY_OPTIONS = Object.entries(CATEGORY_LABEL);
+const ALLOWABLE_CATS     = ['equipment','software','office','travel','professional_fees','marketing','training','insurance','staff_costs','phone_internet','pension_employer','bank_charges'];
+const NON_ALLOWABLE_CATS = ['client_entertainment','fines','personal','political'];
+const DUAL_CATS          = ['home_office','other'];
 
 function today() {
   return new Date().toISOString().split('T')[0];
@@ -24,6 +43,26 @@ function today() {
 function formatDate(iso) {
   if (!iso) return '';
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso));
+}
+
+// ---------------------------------------------------------------------------
+// Inline tooltip
+// ---------------------------------------------------------------------------
+
+function Tip({ text }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      className="biz-tip-wrap"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onFocus={() => setShow(true)}
+      onBlur={() => setShow(false)}
+    >
+      <button type="button" className="biz-tip-btn" aria-label="More info" tabIndex={0}>ℹ</button>
+      {show && <span className="biz-tip-bubble" role="tooltip">{text}</span>}
+    </span>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -76,14 +115,9 @@ function IncomeModal({ onClose, onSuccess, item }) {
     setSaving(true);
     try {
       const url = item ? `/api/business/income/${item.id}` : '/api/business/income';
-      const method = item ? 'PATCH' : 'POST';
       const res = await apiFetch(url, {
-        method,
-        body: JSON.stringify({
-          amount,
-          date_received: form.date_received,
-          description: form.description.trim() || null,
-        }),
+        method: item ? 'PATCH' : 'POST',
+        body: JSON.stringify({ amount, date_received: form.date_received, description: form.description.trim() || null }),
       });
       if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.detail || 'Failed to save.'); }
       onSuccess();
@@ -117,16 +151,23 @@ function IncomeModal({ onClose, onSuccess, item }) {
 
 function ExpenseModal({ onClose, onSuccess, item }) {
   const { apiFetch } = useAuth();
+
+  const initCat = item?.category ?? 'equipment';
   const [form, setForm] = useState({
     amount: item?.amount ?? '',
     date_incurred: item?.date_incurred ?? today(),
-    category: item?.category ?? 'other',
+    category: initCat,
     description: item?.description ?? '',
+    is_allowable: item != null ? item.is_allowable : CATEGORY_INFO[initCat].allowable,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   function field(k, v) { setForm(p => ({ ...p, [k]: v })); }
+
+  function handleCategoryChange(cat) {
+    setForm(p => ({ ...p, category: cat, is_allowable: CATEGORY_INFO[cat]?.allowable ?? true }));
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -137,14 +178,14 @@ function ExpenseModal({ onClose, onSuccess, item }) {
     setSaving(true);
     try {
       const url = item ? `/api/business/expenses/${item.id}` : '/api/business/expenses';
-      const method = item ? 'PATCH' : 'POST';
       const res = await apiFetch(url, {
-        method,
+        method: item ? 'PATCH' : 'POST',
         body: JSON.stringify({
           amount,
           date_incurred: form.date_incurred,
           category: form.category,
           description: form.description.trim() || null,
+          is_allowable: form.is_allowable,
         }),
       });
       if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.detail || 'Failed to save.'); }
@@ -154,6 +195,8 @@ function ExpenseModal({ onClose, onSuccess, item }) {
       setSaving(false);
     }
   }
+
+  const catInfo = CATEGORY_INFO[form.category] ?? CATEGORY_INFO.other;
 
   return (
     <ModalShell title={item ? 'Edit expense' : 'Add expense'} onClose={onClose}>
@@ -169,9 +212,33 @@ function ExpenseModal({ onClose, onSuccess, item }) {
         </div>
         <div className="form-group">
           <label htmlFor="be-cat">Category</label>
-          <select id="be-cat" value={form.category} onChange={e => field('category', e.target.value)}>
-            {CATEGORY_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          <select id="be-cat" value={form.category} onChange={e => handleCategoryChange(e.target.value)}>
+            <optgroup label="✓ Allowable expenses">
+              {ALLOWABLE_CATS.map(v => <option key={v} value={v}>{CATEGORY_INFO[v].label}</option>)}
+            </optgroup>
+            <optgroup label="✗ Non-allowable expenses">
+              {NON_ALLOWABLE_CATS.map(v => <option key={v} value={v}>{CATEGORY_INFO[v].label}</option>)}
+            </optgroup>
+            <optgroup label="Dual-purpose — confirm below">
+              {DUAL_CATS.map(v => <option key={v} value={v}>{CATEGORY_INFO[v].label}</option>)}
+            </optgroup>
           </select>
+        </div>
+        <div className="form-group">
+          <label className="allowable-row-label">
+            Allowable for tax
+            <Tip text={catInfo.tip} />
+          </label>
+          <label className="allowable-toggle">
+            <input
+              type="checkbox"
+              checked={form.is_allowable}
+              onChange={e => field('is_allowable', e.target.checked)}
+            />
+            <span className={`allowable-badge${form.is_allowable ? ' allowable-badge--yes' : ' allowable-badge--no'}`}>
+              {form.is_allowable ? '✓ Yes — reduces taxable profit' : '✗ No — not tax-deductible'}
+            </span>
+          </label>
         </div>
         <div className="form-group">
           <label htmlFor="be-desc">Description <span className="form-hint-inline">(optional)</span></label>
@@ -184,7 +251,7 @@ function ExpenseModal({ onClose, onSuccess, item }) {
 }
 
 // ---------------------------------------------------------------------------
-// Add buttons (reused in both empty state and main view)
+// Add buttons
 // ---------------------------------------------------------------------------
 
 function AddButtons({ onIncome, onExpense }) {
@@ -204,18 +271,18 @@ export default function Business() {
   const { apiFetch, businessType } = useAuth();
   const navigate = useNavigate();
 
-  // Send first-time business users to set their business type
   useEffect(() => {
     if (businessType === null) {
       navigate('/choose-business-type', { replace: true });
     }
   }, [businessType, navigate]);
+
   const [summary, setSummary] = useState(null);
   const [income, setIncome] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null);   // 'income' | 'expense'
-  const [editItem, setEditItem] = useState(null); // { type, item }
+  const [modal, setModal] = useState(null);
+  const [editItem, setEditItem] = useState(null);
   const [actionError, setActionError] = useState('');
 
   const fetchAll = useCallback(async () => {
@@ -232,19 +299,12 @@ export default function Business() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  function openIncomeModal() { setEditItem(null); setModal('income'); }
+  function openIncomeModal()  { setEditItem(null); setModal('income'); }
   function openExpenseModal() { setEditItem(null); setModal('expense'); }
-  function closeModal() { setModal(null); setEditItem(null); }
+  function closeModal()       { setModal(null); setEditItem(null); }
+  function handleSuccess()    { closeModal(); fetchAll(); }
 
-  function handleSuccess() {
-    closeModal();
-    fetchAll();
-  }
-
-  function startEdit(type, item) {
-    setEditItem({ type, item });
-    setModal(type);
-  }
+  function startEdit(type, item) { setEditItem({ type, item }); setModal(type); }
 
   async function handleDelete(type, id) {
     setActionError('');
@@ -258,7 +318,6 @@ export default function Business() {
     }
   }
 
-  // Merge income + expenses, sort newest first, take top 10
   const activity = [
     ...income.map(i => ({ ...i, _type: 'income', _date: i.date_received })),
     ...expenses.map(e => ({ ...e, _type: 'expense', _date: e.date_incurred })),
@@ -266,9 +325,12 @@ export default function Business() {
     .sort((a, b) => b._date.localeCompare(a._date))
     .slice(0, 10);
 
-  // ---------------------------------------------------------------------------
-  // Loading state
-  // ---------------------------------------------------------------------------
+  const disclaimer = (
+    <p className="biz-disclaimer">
+      Allowability is based on standard HMRC rules — your situation may differ.
+      Speak to an accountant if you&rsquo;re unsure. This is a calculation tool, not tax advice.
+    </p>
+  );
 
   if (loading) {
     return (
@@ -280,10 +342,6 @@ export default function Business() {
       </>
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // First visit — no data yet
-  // ---------------------------------------------------------------------------
 
   if (!summary?.has_business_data) {
     return (
@@ -298,18 +356,16 @@ export default function Business() {
             </p>
             <AddButtons onIncome={openIncomeModal} onExpense={openExpenseModal} />
           </div>
+          {disclaimer}
         </main>
-        {modal === 'income' && <IncomeModal onClose={closeModal} onSuccess={handleSuccess} item={null} />}
-        {modal === 'expense' && <ExpenseModal onClose={closeModal} onSuccess={handleSuccess} item={null} />}
+        {modal === 'income'   && <IncomeModal  onClose={closeModal} onSuccess={handleSuccess} item={null} />}
+        {modal === 'expense'  && <ExpenseModal onClose={closeModal} onSuccess={handleSuccess} item={null} />}
       </>
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Main view
-  // ---------------------------------------------------------------------------
-
-  const profitClass = summary.estimated_profit >= 0 ? 'business-metric--positive' : 'business-metric--negative';
+  const cashClass    = summary.cash_profit    >= 0 ? 'business-metric--positive' : 'business-metric--negative';
+  const taxableClass = summary.taxable_profit >= 0 ? 'business-metric--positive' : 'business-metric--negative';
 
   return (
     <>
@@ -319,19 +375,39 @@ export default function Business() {
 
         {actionError && <div className="error-banner">{actionError}</div>}
 
-        {/* Summary cards */}
+        {/* Expenses breakdown — 3 cards */}
         <div className="cards-grid business-summary-grid">
           <div className="card">
             <p className="card-title">Revenue this year</p>
             <p className="business-metric">{gbp(summary.revenue_ytd)}</p>
           </div>
           <div className="card">
-            <p className="card-title">Expenses this year</p>
-            <p className="business-metric">{gbp(summary.expenses_ytd)}</p>
+            <p className="card-title">Total expenses</p>
+            <p className="business-metric">{gbp(summary.total_expenses_ytd)}</p>
           </div>
           <div className="card">
-            <p className="card-title">Estimated profit</p>
-            <p className={`business-metric ${profitClass}`}>{gbp(summary.estimated_profit)}</p>
+            <p className="card-title">
+              Allowable expenses
+              <Tip text="Allowable expenses reduce your taxable profit and therefore your corporation tax bill." />
+            </p>
+            <p className="business-metric">{gbp(summary.allowable_expenses_ytd)}</p>
+          </div>
+        </div>
+
+        {/* Profit split — 2 cards */}
+        <div className="biz-profit-grid">
+          <div className="card">
+            <p className="card-title">Money left after all costs</p>
+            <p className={`business-metric ${cashClass}`}>{gbp(summary.cash_profit)}</p>
+            <p className="biz-metric-sub">Revenue minus all expenses</p>
+          </div>
+          <div className="card">
+            <p className="card-title">
+              Taxable profit (estimated)
+              <Tip text="Revenue minus allowable expenses only — this is what corporation tax is calculated on." />
+            </p>
+            <p className={`business-metric ${taxableClass}`}>{gbp(summary.taxable_profit)}</p>
+            <p className="biz-metric-sub">Revenue minus allowable expenses only</p>
           </div>
         </div>
 
@@ -345,12 +421,12 @@ export default function Business() {
             <ul className="item-list">
               {activity.map(entry => {
                 const isIncome = entry._type === 'income';
-                const label = isIncome
-                  ? (entry.description || 'Income')
-                  : (CATEGORY_LABEL[entry.category] || entry.category);
-                const detail = [
+                const catInfo  = CATEGORY_INFO[entry.category];
+                const label    = isIncome ? (entry.description || 'Income') : (catInfo?.label ?? entry.category);
+                const detail   = [
                   formatDate(entry._date),
                   !isIncome && entry.description ? entry.description : null,
+                  !isIncome && !entry.is_allowable ? 'non-allowable' : null,
                 ].filter(Boolean).join(' · ');
 
                 return (
@@ -372,6 +448,8 @@ export default function Business() {
             </ul>
           </div>
         )}
+
+        {disclaimer}
       </main>
 
       {modal === 'income' && (

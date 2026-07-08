@@ -188,12 +188,15 @@ def get_business_summary(
         .first()
     )
 
-    revenue = round(sum(i.amount for i in income_ytd), 2)
-    expenses = round(sum(e.amount for e in expenses_ytd), 2)
+    revenue            = round(sum(i.amount for i in income_ytd), 2)
+    total_expenses     = round(sum(e.amount for e in expenses_ytd), 2)
+    allowable_expenses = round(sum(e.amount for e in expenses_ytd if e.is_allowable), 2)
 
     return BusinessSummaryOut(
         revenue_ytd=revenue,
-        expenses_ytd=expenses,
-        estimated_profit=round(revenue - expenses, 2),
+        total_expenses_ytd=total_expenses,
+        allowable_expenses_ytd=allowable_expenses,
+        cash_profit=round(revenue - total_expenses, 2),
+        taxable_profit=round(revenue - allowable_expenses, 2),
         has_business_data=any_income is not None or any_expense is not None,
     )
