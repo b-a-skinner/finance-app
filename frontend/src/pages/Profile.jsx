@@ -4,6 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import { gbp } from '../utils/format';
 import { API_BASE } from '../utils/config';
 
+const BUSINESS_TYPE_LABELS = {
+  sole_trader:     'Sole trader',
+  limited_company: 'Limited company',
+  partnership:     'Partnership',
+  llp:             'Limited liability partnership (LLP)',
+  not_sure:        'Not sure yet',
+};
+
 const EMPTY = { dob_day: '', dob_month: '', dob_year: '', occupation: '', postcode_outward: '' };
 
 const GOAL_OPTIONS = [
@@ -229,7 +237,7 @@ function DobInput({ day, month, year, onChange }) {
 }
 
 export default function Profile() {
-  const { apiFetch } = useAuth();
+  const { apiFetch, setBusinessType: ctxSetBusinessType } = useAuth();
   const [form, setForm] = useState(EMPTY);
   const [occupations, setOccupations] = useState([]);
   const [showOccDropdown, setShowOccDropdown] = useState(false);
@@ -246,6 +254,9 @@ export default function Profile() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
+  const [businessTypeSel, setBusinessTypeSel] = useState('');
+  const [businessTypeSaving, setBusinessTypeSaving] = useState(false);
+  const [businessTypeSaved, setBusinessTypeSaved] = useState(false);
 
   const loadComparison = useCallback(() => {
     apiFetch('/api/profile/comparison')
@@ -270,6 +281,7 @@ export default function Profile() {
         setRegionKnown(data.postcode_outward != null && data.postcode_outward !== '');
         setDobSet(!!data.date_of_birth);
         setPostcodeSet(!!data.postcode_outward);
+        setBusinessTypeSel(data.business_type ?? '');
         loadComparison();
       })
       .catch(() => setError('Failed to load profile.'))
@@ -381,6 +393,23 @@ export default function Profile() {
       setFormError('Network error — please try again.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleBusinessTypeSave() {
+    setBusinessTypeSaving(true);
+    setBusinessTypeSaved(false);
+    try {
+      const res = await apiFetch('/api/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({ business_type: businessTypeSel || null }),
+      });
+      if (res.ok) {
+        ctxSetBusinessType(businessTypeSel || null);
+        setBusinessTypeSaved(true);
+      }
+    } finally {
+      setBusinessTypeSaving(false);
     }
   }
 
@@ -501,6 +530,38 @@ export default function Profile() {
 
         <div className="resource-layout resource-layout--single" style={{ marginTop: '1.5rem' }}>
           <HowYouCompare cmp={comparison} dobSet={dobSet} postcodeSet={postcodeSet} />
+        </div>
+
+        <div className="resource-layout resource-layout--single" style={{ marginTop: '1.5rem' }}>
+          <div className="card">
+            <p className="card-title">Business</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
+              Used to tailor business features as they roll out. Doesn't affect any calculations.
+            </p>
+            <div className="form-group">
+              <label htmlFor="business-type">Business type</label>
+              <select
+                id="business-type"
+                value={businessTypeSel}
+                onChange={e => { setBusinessTypeSel(e.target.value); setBusinessTypeSaved(false); }}
+              >
+                <option value="">— Select —</option>
+                {Object.entries(BUSINESS_TYPE_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-actions">
+              <button type="button" className="btn-primary" onClick={handleBusinessTypeSave} disabled={businessTypeSaving}>
+                {businessTypeSaving ? 'Saving…' : 'Save'}
+              </button>
+              {businessTypeSaved && (
+                <span style={{ color: 'var(--color-positive)', fontSize: '0.9rem', alignSelf: 'center' }}>
+                  Saved ✓
+                </span>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="resource-layout resource-layout--single" style={{ marginTop: '1.5rem' }}>

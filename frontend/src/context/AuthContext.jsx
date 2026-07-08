@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useState } from 'react';
 import { API_BASE } from '../utils/config';
 
-const TOKEN_KEY = 'token';
-const MODE_KEY  = 'activeMode';
+const TOKEN_KEY         = 'token';
+const MODE_KEY          = 'activeMode';
+const BUSINESS_TYPE_KEY = 'businessType';
 
 const AuthContext = createContext(null);
 
@@ -10,6 +11,9 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
   const [activeMode, setActiveModeState] = useState(
     () => localStorage.getItem(MODE_KEY) || null,
+  );
+  const [businessType, setBusinessTypeState] = useState(
+    () => localStorage.getItem(BUSINESS_TYPE_KEY) || null,
   );
 
   async function login(email, password) {
@@ -42,11 +46,13 @@ export function AuthProvider({ children }) {
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(MODE_KEY);
+    localStorage.removeItem(BUSINESS_TYPE_KEY);
     setToken(null);
     setActiveModeState(null);
+    setBusinessTypeState(null);
   }
 
-  // Fetch profile from server, sync active_mode into local state and localStorage.
+  // Fetch profile from server, sync active_mode + business_type into local state.
   // Returns the mode string ('personal'|'business'|null).
   async function loadModeFromServer() {
     const currentToken = localStorage.getItem(TOKEN_KEY);
@@ -60,13 +66,17 @@ export function AuthProvider({ children }) {
       });
       if (!res.ok) return null;
       const data = await res.json();
+
       const mode = data.active_mode ?? null;
-      if (mode) {
-        localStorage.setItem(MODE_KEY, mode);
-      } else {
-        localStorage.removeItem(MODE_KEY);
-      }
+      if (mode) localStorage.setItem(MODE_KEY, mode);
+      else localStorage.removeItem(MODE_KEY);
       setActiveModeState(mode);
+
+      const btype = data.business_type ?? null;
+      if (btype) localStorage.setItem(BUSINESS_TYPE_KEY, btype);
+      else localStorage.removeItem(BUSINESS_TYPE_KEY);
+      setBusinessTypeState(btype);
+
       return mode;
     } catch {
       return null;
@@ -76,11 +86,9 @@ export function AuthProvider({ children }) {
   // Optimistically update mode locally, then persist to server in background.
   function switchMode(mode) {
     setActiveModeState(mode);
-    if (mode) {
-      localStorage.setItem(MODE_KEY, mode);
-    } else {
-      localStorage.removeItem(MODE_KEY);
-    }
+    if (mode) localStorage.setItem(MODE_KEY, mode);
+    else localStorage.removeItem(MODE_KEY);
+
     const currentToken = localStorage.getItem(TOKEN_KEY);
     if (currentToken) {
       fetch(`${API_BASE}/api/profile/mode`, {
@@ -90,6 +98,25 @@ export function AuthProvider({ children }) {
           Authorization: `Bearer ${currentToken}`,
         },
         body: JSON.stringify({ active_mode: mode }),
+      }).catch(() => {});
+    }
+  }
+
+  // Update business_type locally + persist to server.
+  function setBusinessType(type) {
+    setBusinessTypeState(type);
+    if (type) localStorage.setItem(BUSINESS_TYPE_KEY, type);
+    else localStorage.removeItem(BUSINESS_TYPE_KEY);
+
+    const currentToken = localStorage.getItem(TOKEN_KEY);
+    if (currentToken) {
+      fetch(`${API_BASE}/api/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${currentToken}`,
+        },
+        body: JSON.stringify({ business_type: type }),
       }).catch(() => {});
     }
   }
@@ -112,10 +139,12 @@ export function AuthProvider({ children }) {
         token,
         isAuthenticated: !!token,
         activeMode,
+        businessType,
         login,
         register,
         logout,
         switchMode,
+        setBusinessType,
         loadModeFromServer,
         apiFetch,
       }}

@@ -25,6 +25,7 @@ class User(TimestampMixin, Base):
     occupation: Mapped[str | None] = mapped_column(String(255), nullable=True)
     postcode_outward: Mapped[str | None] = mapped_column(String(10), nullable=True)
     active_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    business_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     onboarding_dismiss_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

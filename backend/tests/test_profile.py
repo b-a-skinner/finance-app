@@ -326,3 +326,51 @@ class TestProfileMode:
         client.patch(f"{PROFILE}/mode", json={"active_mode": "business"}, headers=alice_headers)
         bob_body = client.get(PROFILE, headers=bob_headers).json()
         assert bob_body["active_mode"] is None
+
+
+class TestProfileBusinessType:
+    def test_business_type_null_for_new_user(self, client, db):
+        _register(client)
+        body = client.get(PROFILE, headers=_auth_header(client)).json()
+        assert body["business_type"] is None
+
+    def test_set_business_type_via_patch(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        resp = client.patch(PROFILE, json={"business_type": "sole_trader"}, headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["business_type"] == "sole_trader"
+
+    def test_business_type_persists_on_get(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        client.patch(PROFILE, json={"business_type": "limited_company"}, headers=headers)
+        body = client.get(PROFILE, headers=headers).json()
+        assert body["business_type"] == "limited_company"
+
+    def test_change_business_type(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        client.patch(PROFILE, json={"business_type": "partnership"}, headers=headers)
+        client.patch(PROFILE, json={"business_type": "llp"}, headers=headers)
+        body = client.get(PROFILE, headers=headers).json()
+        assert body["business_type"] == "llp"
+
+    def test_business_type_does_not_clear_other_fields(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        client.patch(PROFILE, json={"occupation": "Engineer"}, headers=headers)
+        client.patch(PROFILE, json={"business_type": "sole_trader"}, headers=headers)
+        body = client.get(PROFILE, headers=headers).json()
+        assert body["occupation"] == "Engineer"
+        assert body["business_type"] == "sole_trader"
+
+    def test_business_type_isolated_between_users(self, client, db):
+        bob = {"email": "bob@example.com", "password": "bobpass1"}
+        _register(client)
+        client.post(REGISTER, json=bob)
+        alice_headers = _auth_header(client)
+        bob_headers = _auth_header(client, bob)
+        client.patch(PROFILE, json={"business_type": "sole_trader"}, headers=alice_headers)
+        bob_body = client.get(PROFILE, headers=bob_headers).json()
+        assert bob_body["business_type"] is None

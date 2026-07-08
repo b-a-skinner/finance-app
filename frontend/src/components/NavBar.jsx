@@ -19,7 +19,7 @@ const BUSINESS_LINKS = [
 ];
 
 export default function NavBar() {
-  const { logout, activeMode, switchMode } = useAuth();
+  const { logout, activeMode, businessType, switchMode } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const navRef = useRef(null);
@@ -48,29 +48,35 @@ export default function NavBar() {
 
   function handleModeSwitch(mode) {
     switchMode(mode);
-    navigate(mode === 'business' ? '/business' : '/dashboard', { replace: true });
+    if (mode === 'business') {
+      navigate(businessType ? '/business' : '/choose-business-type', { replace: true });
+    } else {
+      navigate('/dashboard', { replace: true });
+    }
   }
 
   return (
     <nav className="navbar" ref={navRef}>
-      <span className="navbar-brand">fivera</span>
-
-      {activeMode && (
-        <div className="mode-pill">
-          <button
-            className={`mode-pill-btn${activeMode === 'personal' ? ' mode-pill-btn--active' : ''}`}
-            onClick={() => handleModeSwitch('personal')}
-          >
-            Personal
-          </button>
-          <button
-            className={`mode-pill-btn${activeMode === 'business' ? ' mode-pill-btn--active' : ''}`}
-            onClick={() => handleModeSwitch('business')}
-          >
-            Business
-          </button>
-        </div>
-      )}
+      {/* Left group: logo + pill — always anchored left */}
+      <div className="navbar-left">
+        <span className="navbar-brand">fivera</span>
+        {activeMode && (
+          <div className="mode-pill">
+            <button
+              className={`mode-pill-btn${activeMode === 'personal' ? ' mode-pill-btn--active' : ''}`}
+              onClick={() => handleModeSwitch('personal')}
+            >
+              Personal
+            </button>
+            <button
+              className={`mode-pill-btn${activeMode === 'business' ? ' mode-pill-btn--active' : ''}`}
+              onClick={() => handleModeSwitch('business')}
+            >
+              Business
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Desktop nav — hidden on mobile via CSS */}
       <div className="navbar-links">

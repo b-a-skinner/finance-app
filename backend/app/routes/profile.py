@@ -22,6 +22,7 @@ def _to_out(user: User) -> ProfileOut:
         postcode_outward=user.postcode_outward,
         region=get_region_from_postcode(user.postcode_outward),
         active_mode=user.active_mode,
+        business_type=user.business_type,
     )
 
 

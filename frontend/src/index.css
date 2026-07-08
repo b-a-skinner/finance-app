@@ -43,6 +43,21 @@ body {
   z-index: 10;
 }
 
+/* Left cluster: logo + pill stay anchored regardless of nav link count */
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+/* Hide desktop pill on mobile — mobile menu has its own */
+@media (max-width: 767px) {
+  .navbar-left .mode-pill {
+    display: none;
+  }
+}
+
 .navbar-brand {
   font-weight: 700;
   font-size: 1.05rem;
@@ -1964,13 +1979,32 @@ button.checklist-link {
 .business-actions {
   display: flex;
   gap: 0.75rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .business-actions > button {
   flex: 1;
-  min-width: 140px;
+}
+
+/* Mobile: stick action buttons to the bottom of the screen */
+@media (max-width: 767px) {
+  .business-actions {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+    z-index: 5;
+  }
+
+  /* Extra padding so the fixed bar doesn't overlap content */
+  .business-page {
+    padding-bottom: 80px;
+  }
 }
 
 .business-activity-row {
@@ -2087,4 +2121,40 @@ button.checklist-link {
   font-size: 0.9rem;
   color: var(--color-text-muted);
   line-height: 1.45;
+}
+
+/* ── Choose business type ────────────────────────────────── */
+.choose-business-type-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 480px;
+}
+
+.choose-mode-cards--column {
+  flex-direction: column;
+  max-width: 480px;
+}
+
+.choose-mode-card--type {
+  min-width: unset;
+  width: 100%;
+  padding: 1rem 1.25rem;
+}
+
+.choose-mode-card--type .choose-mode-card__title {
+  font-size: 1rem;
+}
+
+.choose-mode-card--selected {
+  border-color: var(--color-primary);
+  background: rgba(26, 58, 92, 0.05);
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+.choose-business-type-submit {
+  width: 100%;
+  max-width: 480px;
 }

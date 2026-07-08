@@ -2,12 +2,17 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function ChooseMode() {
-  const { switchMode } = useAuth();
+  const { switchMode, businessType } = useAuth();
   const navigate = useNavigate();
 
   function choose(mode) {
     switchMode(mode);
-    navigate(mode === 'business' ? '/business' : '/dashboard', { replace: true });
+    if (mode === 'business') {
+      // Show business type setup if not yet captured
+      navigate(businessType ? '/business' : '/choose-business-type', { replace: true });
+    } else {
+      navigate('/dashboard', { replace: true });
+    }
   }
 
   return (

@@ -220,6 +220,7 @@ class ProfileUpdate(BaseModel):
     date_of_birth: date | None = None
     occupation: str | None = None
     postcode_outward: str | None = None
+    business_type: str | None = None
 
     @field_validator("postcode_outward")
     @classmethod
@@ -243,6 +244,7 @@ class ProfileOut(BaseModel):
     postcode_outward: str | None
     region: str | None
     active_mode: str | None
+    business_type: str | None
 
 
 class ModeUpdate(BaseModel):

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import { useAuth } from '../context/AuthContext';
 import { gbp } from '../utils/format';
@@ -200,7 +201,15 @@ function AddButtons({ onIncome, onExpense }) {
 // ---------------------------------------------------------------------------
 
 export default function Business() {
-  const { apiFetch } = useAuth();
+  const { apiFetch, businessType } = useAuth();
+  const navigate = useNavigate();
+
+  // Send first-time business users to set their business type
+  useEffect(() => {
+    if (businessType === null) {
+      navigate('/choose-business-type', { replace: true });
+    }
+  }, [businessType, navigate]);
   const [summary, setSummary] = useState(null);
   const [income, setIncome] = useState([]);
   const [expenses, setExpenses] = useState([]);
@@ -265,7 +274,7 @@ export default function Business() {
     return (
       <>
         <NavBar />
-        <main className="resource-page">
+        <main className="resource-page business-page">
           <p className="list-empty">Loading…</p>
         </main>
       </>
@@ -280,7 +289,7 @@ export default function Business() {
     return (
       <>
         <NavBar />
-        <main className="resource-page">
+        <main className="resource-page business-page">
           <div className="empty-state">
             <h2>Your business finances</h2>
             <p>
@@ -305,7 +314,7 @@ export default function Business() {
   return (
     <>
       <NavBar />
-      <main className="resource-page">
+      <main className="resource-page business-page">
         <h1 className="page-title">Business</h1>
 
         {actionError && <div className="error-banner">{actionError}</div>}
