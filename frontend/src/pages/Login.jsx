@@ -20,7 +20,7 @@ function EyeIcon({ visible }) {
 }
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, loadModeFromServer } = useAuth();
   const navigate = useNavigate();
 
   const [email,       setEmail]       = useState('');
@@ -45,7 +45,14 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate('/dashboard', { replace: true });
+      const mode = await loadModeFromServer();
+      if (mode === 'business') {
+        navigate('/business', { replace: true });
+      } else if (mode === 'personal') {
+        navigate('/dashboard', { replace: true });
+      } else {
+        navigate('/choose-mode', { replace: true });
+      }
     } catch (err) {
       setError(err.message);
     } finally {

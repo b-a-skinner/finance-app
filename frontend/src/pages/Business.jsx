@@ -190,7 +190,7 @@ function AddButtons({ onIncome, onExpense }) {
   return (
     <div className="business-actions">
       <button className="btn-primary" onClick={onIncome}>+ Add income</button>
-      <button className="btn-secondary" onClick={onExpense}>+ Add expense</button>
+      <button className="btn-primary" onClick={onExpense}>+ Add expense</button>
     </div>
   );
 }

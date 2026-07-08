@@ -242,6 +242,11 @@ class ProfileOut(BaseModel):
     occupation: str | None
     postcode_outward: str | None
     region: str | None
+    active_mode: str | None
+
+
+class ModeUpdate(BaseModel):
+    active_mode: Literal['personal', 'business']
 
 
 # ---------------------------------------------------------------------------

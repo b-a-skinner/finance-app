@@ -7,7 +7,7 @@ from app.database import get_db
 from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, IncomeSource, OccupationCode, OccupationSalaryBenchmark, PensionPot, RegionalSalaryBenchmark
 from app.models.user import User
 from app.routes.auth import get_current_user
-from app.schemas import AgeComparisonOut, OnboardingOut, OnboardingUpdate, OccupationOut, ProfileOut, ProfileUpdate
+from app.schemas import AgeComparisonOut, ModeUpdate, OnboardingOut, OnboardingUpdate, OccupationOut, ProfileOut, ProfileUpdate
 from app.services.age_benchmark import get_age_comparison, get_occupation_comparison, get_regional_comparison
 from app.services.postcode_lookup import get_region_from_postcode
 
@@ -21,6 +21,7 @@ def _to_out(user: User) -> ProfileOut:
         occupation=user.occupation,
         postcode_outward=user.postcode_outward,
         region=get_region_from_postcode(user.postcode_outward),
+        active_mode=user.active_mode,
     )
 
 
@@ -81,6 +82,17 @@ def update_onboarding(
         financial_goals=current_user.financial_goals,
         current_onboarding_step=current_user.current_onboarding_step,
     )
+
+
+@router.patch("/mode")
+def update_mode(
+    body: ModeUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_user.active_mode = body.active_mode
+    db.commit()
+    return {"active_mode": body.active_mode}
 
 
 @router.get("/comparison", response_model=AgeComparisonOut)

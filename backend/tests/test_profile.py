@@ -270,3 +270,59 @@ class TestProfilePatch:
     def test_patch_requires_auth(self, client, db):
         resp = client.patch(PROFILE, json={"first_name": "X"})
         assert resp.status_code == 401
+
+
+class TestProfileMode:
+    def test_mode_null_for_new_user(self, client, db):
+        _register(client)
+        body = client.get(PROFILE, headers=_auth_header(client)).json()
+        assert body["active_mode"] is None
+
+    def test_set_personal_mode(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        resp = client.patch(f"{PROFILE}/mode", json={"active_mode": "personal"}, headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["active_mode"] == "personal"
+
+    def test_set_business_mode(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        resp = client.patch(f"{PROFILE}/mode", json={"active_mode": "business"}, headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["active_mode"] == "business"
+
+    def test_mode_persists_on_get(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        client.patch(f"{PROFILE}/mode", json={"active_mode": "business"}, headers=headers)
+        body = client.get(PROFILE, headers=headers).json()
+        assert body["active_mode"] == "business"
+
+    def test_switch_mode_overwrites(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        client.patch(f"{PROFILE}/mode", json={"active_mode": "personal"}, headers=headers)
+        client.patch(f"{PROFILE}/mode", json={"active_mode": "business"}, headers=headers)
+        body = client.get(PROFILE, headers=headers).json()
+        assert body["active_mode"] == "business"
+
+    def test_invalid_mode_rejected(self, client, db):
+        _register(client)
+        headers = _auth_header(client)
+        resp = client.patch(f"{PROFILE}/mode", json={"active_mode": "admin"}, headers=headers)
+        assert resp.status_code == 422
+
+    def test_mode_requires_auth(self, client, db):
+        resp = client.patch(f"{PROFILE}/mode", json={"active_mode": "personal"})
+        assert resp.status_code == 401
+
+    def test_mode_isolated_between_users(self, client, db):
+        bob = {"email": "bob@example.com", "password": "bobpass1"}
+        _register(client)
+        client.post(REGISTER, json=bob)
+        alice_headers = _auth_header(client)
+        bob_headers = _auth_header(client, bob)
+        client.patch(f"{PROFILE}/mode", json={"active_mode": "business"}, headers=alice_headers)
+        bob_body = client.get(PROFILE, headers=bob_headers).json()
+        assert bob_body["active_mode"] is None

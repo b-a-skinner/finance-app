@@ -1968,6 +1968,11 @@ button.checklist-link {
   margin-bottom: 0.5rem;
 }
 
+.business-actions > button {
+  flex: 1;
+  min-width: 140px;
+}
+
 .business-activity-row {
   display: flex;
   align-items: center;
@@ -1985,3 +1990,101 @@ button.checklist-link {
 
 .business-amount--income  { color: var(--color-positive); }
 .business-amount--expense { color: var(--color-negative); }
+
+/* ── Mode pill ───────────────────────────────────────────── */
+.mode-pill {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  padding: 3px;
+  gap: 0;
+}
+
+.mode-pill--mobile {
+  margin: 0.5rem 1rem;
+  align-self: flex-start;
+}
+
+.mode-pill-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.2rem 0.65rem;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.mode-pill-btn:hover {
+  color: #fff;
+}
+
+.mode-pill-btn--active {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+/* ── Choose-mode page ────────────────────────────────────── */
+.choose-mode-page {
+  min-height: calc(100vh - 56px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  gap: 2rem;
+}
+
+.choose-mode-page h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.choose-mode-cards {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+  max-width: 600px;
+}
+
+.choose-mode-card {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 1.75rem 1.5rem;
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-shadow: var(--shadow);
+}
+
+.choose-mode-card:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 12px rgba(26, 58, 92, 0.15);
+}
+
+.choose-mode-card__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.choose-mode-card__desc {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
