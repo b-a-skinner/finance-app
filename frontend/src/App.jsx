@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Assets from './pages/Assets';
 import Business from './pages/Business';
+import Transactions from './pages/Transactions';
 import ChooseMode from './pages/ChooseMode';
 import ChooseBusinessType from './pages/ChooseBusinessType';
 import Dashboard from './pages/Dashboard';
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/savings" element={<P><Savings /></P>} />
           <Route path="/pension" element={<P><Pension /></P>} />
           <Route path="/business" element={<P><Business /></P>} />
+          <Route path="/transactions" element={<P><Transactions /></P>} />
           <Route path="/choose-mode" element={<P><ChooseMode /></P>} />
           <Route path="/choose-business-type" element={<P><ChooseBusinessType /></P>} />
           <Route path="/profile" element={<P><Profile /></P>} />

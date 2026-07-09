@@ -14,8 +14,9 @@ const PERSONAL_LINKS = [
 ];
 
 const BUSINESS_LINKS = [
-  { to: '/business', label: 'Dashboard' },
-  { to: '/profile',  label: 'Profile' },
+  { to: '/business',     label: 'Dashboard' },
+  { to: '/transactions', label: 'Transactions' },
+  { to: '/profile',      label: 'Profile' },
 ];
 
 export default function NavBar() {
