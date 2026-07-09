@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import BusinessExpense, BusinessIncome
-from app.models.config import BusinessTaxConfig
+from app.models.config import BusinessTaxConfig, TaxYearConfig
+from app.services.tax_calculator import calculate_sole_trader_tax
 from app.models.user import User
 from app.routes.auth import get_current_user
 from app.schemas import (
@@ -17,6 +18,7 @@ from app.schemas import (
     BusinessIncomeUpdate,
     BusinessSummaryOut,
     BusinessTaxConfigOut,
+    SoleTraderTaxOut,
 )
 from app.utils import get_owned_or_404
 
@@ -279,6 +281,7 @@ def get_business_summary(
     start = _tax_year_start()
     end = _tax_year_end()
     cfg = _get_biz_config(db)
+    tax_cfg = db.query(TaxYearConfig).filter_by(tax_year=_tax_year_label()).first()
 
     income_ytd = (
         db.query(BusinessIncome)
@@ -350,16 +353,24 @@ def get_business_summary(
     total_miles            = sum(e.business_miles or 0 for e in mileage_entries)
     allowable_expenses_ytd = round(allowable_cash + mileage_allowance, 2)
     total_expenses_ytd     = round(cash_expenses, 2)
+    taxable_profit         = round(revenue - allowable_expenses_ytd, 2)
+
+    # Sole trader tax estimate — requires both configs and Class 4 fields seeded
+    tax_estimate: SoleTraderTaxOut | None = None
+    if cfg and tax_cfg and cfg.class4_lower_limit is not None:
+        calc = calculate_sole_trader_tax(taxable_profit, tax_cfg, cfg, starting_income=0.0)
+        tax_estimate = SoleTraderTaxOut(**vars(calc))
 
     return BusinessSummaryOut(
         revenue_ytd=revenue,
         total_expenses_ytd=total_expenses_ytd,
         allowable_expenses_ytd=allowable_expenses_ytd,
         cash_profit=round(revenue - total_expenses_ytd, 2),
-        taxable_profit=round(revenue - allowable_expenses_ytd, 2),
+        taxable_profit=taxable_profit,
         has_business_data=any_income is not None or any_expense is not None,
         total_business_miles=total_miles,
         total_mileage_allowance=mileage_allowance,
         mileage_crossover_msg=crossover_msg,
         mileage_attribution=mileage_attribution,
+        tax_estimate=tax_estimate,
     )

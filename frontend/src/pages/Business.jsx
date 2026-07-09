@@ -54,6 +54,12 @@ function vehicleRateNote(vehicleType, taxConfig) {
   return `${Math.round(info.first * 100)}p per mile for the first ${info.threshold.toLocaleString('en-GB')} miles this tax year, then ${Math.round(info.over * 100)}p.`;
 }
 
+const CLASS2_STATUS_LABELS = {
+  covered:           'No Class 2 charge — qualifying year granted automatically.',
+  covered_no_class4: 'No Class 2 or Class 4 to pay — qualifying year still counts toward State Pension.',
+  below_threshold:   'Below small profits threshold — no automatic credit this year.',
+};
+
 const BAND_LABELS = {
   '25_50':    '25–50 hours/month',
   '51_100':   '51–100 hours/month',
@@ -738,6 +744,47 @@ export default function Business() {
             <p className="biz-metric-sub">Revenue minus allowable expenses</p>
           </div>
         </div>
+
+        {/* Tax estimate hero */}
+        {summary.tax_estimate && summary.tax_estimate.taxable_profit > 0 && (
+          <div className="card biz-tax-hero">
+            <p className="card-title">
+              Set aside for your tax bill
+              <Tip text="Income tax + Class 4 NI on your taxable profit. Class 2 NI is shown separately — it's either automatic or voluntary." />
+            </p>
+            <p className="biz-tax-hero-amount">{gbp(summary.tax_estimate.total_set_aside)}</p>
+            <p className="biz-metric-sub">
+              {(summary.tax_estimate.effective_rate * 100).toFixed(1)}% effective rate on{' '}
+              {gbp(summary.tax_estimate.taxable_profit)} taxable profit
+            </p>
+
+            <details className="biz-tax-breakdown">
+              <summary>Show breakdown</summary>
+              <ul className="biz-tax-breakdown-list">
+                <li>
+                  <span className="breakdown-label">Income tax</span>
+                  <span>{gbp(summary.tax_estimate.income_tax_on_profit)}</span>
+                </li>
+                <li>
+                  <span className="breakdown-label">Class 4 NI</span>
+                  <span>{gbp(summary.tax_estimate.class4_ni)}</span>
+                </li>
+                <li>
+                  <span className="breakdown-label">Class 2 NI</span>
+                  <span>{CLASS2_STATUS_LABELS[summary.tax_estimate.class2_status]}</span>
+                </li>
+              </ul>
+              {summary.tax_estimate.class2_voluntary_note && (
+                <p className="biz-tax-class2-note">{summary.tax_estimate.class2_voluntary_note}</p>
+              )}
+            </details>
+
+            <p className="biz-tax-hero-disclaimer">
+              This figure assumes self-employment income only and doesn&rsquo;t account for other income
+              you may have. This is a calculation tool, not tax advice.
+            </p>
+          </div>
+        )}
 
         <AddButtons onIncome={openIncomeModal} onExpense={openExpenseModal} />
 

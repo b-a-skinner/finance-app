@@ -1,9 +1,10 @@
 """Tests for business income/expense CRUD, ownership isolation, YTD summary, and HMRC simplified expenses."""
 from datetime import date, timedelta
+from types import SimpleNamespace
 
 import pytest
 
-from app.models.config import BusinessTaxConfig
+from app.models.config import BusinessTaxConfig, TaxYearConfig
 
 REGISTER = "/api/auth/register"
 LOGIN = "/api/auth/login"
@@ -22,11 +23,15 @@ def auth(client, email="alice@test.com", password="testpass123!"):
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
-def seed_biz_config(db):
-    """Seed a BusinessTaxConfig for the current tax year into the test DB."""
+def _tax_year_label_for_today() -> str:
     today = date.today()
     year  = today.year if today >= date(today.year, 4, 6) else today.year - 1
-    label = f"{year}/{str(year + 1)[2:]}"
+    return f"{year}/{str(year + 1)[2:]}"
+
+
+def seed_biz_config(db):
+    """Seed a BusinessTaxConfig (including Class 4/2 NI) for the current tax year."""
+    label = _tax_year_label_for_today()
     if not db.query(BusinessTaxConfig).filter_by(tax_year=label).first():
         db.add(BusinessTaxConfig(
             tax_year=label,
@@ -38,6 +43,36 @@ def seed_biz_config(db):
             mileage_motorcycle=0.24,
             mileage_bicycle=0.20,
             mileage_threshold=10000,
+            class4_lower_limit=12570,
+            class4_upper_limit=50270,
+            class4_main_rate=0.06,
+            class4_upper_rate=0.02,
+            class2_small_profits_threshold=7105,
+            class2_weekly_rate=3.65,
+        ))
+        db.commit()
+
+
+def seed_tax_year_config(db):
+    """Seed a TaxYearConfig for the current tax year into the test DB."""
+    label = _tax_year_label_for_today()
+    if not db.query(TaxYearConfig).filter_by(tax_year=label).first():
+        db.add(TaxYearConfig(
+            tax_year=label,
+            personal_allowance=12570,
+            basic_rate_threshold=50270,
+            basic_rate_pct=20,
+            higher_rate_threshold=125140,
+            higher_rate_pct=40,
+            additional_rate_pct=45,
+            ni_primary_threshold=12584,
+            ni_upper_threshold=50284,
+            ni_main_rate_pct=8,
+            ni_upper_rate_pct=2,
+            pension_qualifying_lower=6240,
+            pension_qualifying_upper=50270,
+            pension_min_total_pct=8,
+            pension_min_employer_pct=3,
         ))
         db.commit()
 
@@ -702,3 +737,153 @@ class TestMileageAttribution:
         assert attr[str(id1)] == pytest.approx(9000 * 0.55)
         assert attr[str(id2)] == pytest.approx(1000 * 0.55 + 1000 * 0.25)
         assert body1["total_mileage_allowance"] == pytest.approx(9000 * 0.55 + 1000 * 0.55 + 1000 * 0.25)
+
+
+# ---------------------------------------------------------------------------
+# Sole trader tax engine — income tax + Class 4 NI + Class 2 position
+# ---------------------------------------------------------------------------
+
+class TestSoleTraderTax:
+    """Tax engine tests. All rates and thresholds from seeded config, no hardcoding."""
+
+    def _add_income(self, client, h, amount, d):
+        client.post(INCOME_URL, json={"amount": amount, "date_received": d}, headers=h)
+
+    def test_class4_hmrc_worked_example_52k(self, client, db):
+        """£52,000 profit — HMRC worked example: Class 4 = (37,700×6%) + (1,730×2%) = £2,296.60."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_income(client, h, 52000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        assert te is not None
+        assert te["class4_ni"]    == pytest.approx(2296.60)
+        assert te["class2_status"] == "covered"
+        assert te["class2_due"]   == 0.0
+
+    def test_20k_profit(self, client, db):
+        """£20,000 profit — income tax and Class 4 correct; class2_status covered."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_income(client, h, 20000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        assert te is not None
+        assert te["income_tax_on_profit"] == pytest.approx((20000 - 12570) * 0.20)   # £1,486
+        assert te["class4_ni"]            == pytest.approx((20000 - 12570) * 0.06)   # £445.80
+        assert te["class2_status"]        == "covered"
+        assert te["class2_due"]           == 0.0
+
+    def test_10k_profit_covered_no_class4(self, client, db):
+        """£10,000 profit — between SPT (7,105) and lower limit (12,570): class2_status covered_no_class4."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_income(client, h, 10000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        assert te is not None
+        assert te["class4_ni"]            == pytest.approx(0.0)
+        assert te["income_tax_on_profit"] == pytest.approx(0.0)
+        assert te["class2_status"]        == "covered_no_class4"
+        assert te["class2_due"]           == 0.0
+
+    def test_5k_profit_below_threshold(self, client, db):
+        """£5,000 profit — below SPT (7,105): voluntary note surfaced, class2_due still 0."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_income(client, h, 5000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        assert te is not None
+        assert te["class4_ni"]              == pytest.approx(0.0)
+        assert te["class2_status"]          == "below_threshold"
+        assert te["class2_due"]             == 0.0     # never auto-charged
+        assert te["class2_voluntary_note"]  is not None
+        assert "voluntary" in te["class2_voluntary_note"].lower()
+
+    def test_130k_profit_taper(self, client, db):
+        """£130,000 profit — PA is fully tapered; income_tax_on_profit matches personal engine."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_income(client, h, 130000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        assert te is not None
+        # Verify against the personal engine using the seeded config values
+        from app.services.tax_calculator import calculate_income_tax
+        tax_ns = SimpleNamespace(
+            personal_allowance=12570, basic_rate_threshold=50270, basic_rate_pct=20,
+            higher_rate_threshold=125140, higher_rate_pct=40, additional_rate_pct=45,
+            ni_primary_threshold=12584, ni_upper_threshold=50284,
+            ni_main_rate_pct=8, ni_upper_rate_pct=2,
+            pension_qualifying_lower=6240, pension_qualifying_upper=50270,
+        )
+        expected_it = calculate_income_tax(130000, tax_ns)
+        assert te["income_tax_on_profit"] == pytest.approx(expected_it)
+
+    def test_starting_income_seam(self):
+        """starting_income shifts profit to the correct marginal band — proves the seam works."""
+        from app.services.tax_calculator import calculate_sole_trader_tax, calculate_income_tax
+
+        tax_ns = SimpleNamespace(
+            personal_allowance=12570, basic_rate_threshold=50270, basic_rate_pct=20,
+            higher_rate_threshold=125140, higher_rate_pct=40, additional_rate_pct=45,
+            ni_primary_threshold=12584, ni_upper_threshold=50284,
+            ni_main_rate_pct=8, ni_upper_rate_pct=2,
+            pension_qualifying_lower=6240, pension_qualifying_upper=50270,
+        )
+        biz_ns = SimpleNamespace(
+            class4_lower_limit=12570, class4_upper_limit=50270,
+            class4_main_rate=0.06, class4_upper_rate=0.02,
+            class2_small_profits_threshold=7105, class2_weekly_rate=3.65,
+        )
+
+        profit   = 20_000
+        starting = 45_000   # straddles basic→higher band boundary at 50,270
+
+        result = calculate_sole_trader_tax(profit, tax_ns, biz_ns, starting_income=starting)
+
+        # The difference form: income_tax(65000) - income_tax(45000)
+        expected_it = round(
+            calculate_income_tax(starting + profit, tax_ns)
+            - calculate_income_tax(starting, tax_ns),
+            2,
+        )
+        assert result.income_tax_on_profit == pytest.approx(expected_it)
+
+        # Must be higher than the standalone (starting_income=0) result
+        standalone = calculate_sole_trader_tax(profit, tax_ns, biz_ns, starting_income=0)
+        assert result.income_tax_on_profit > standalone.income_tax_on_profit
+
+    def test_total_set_aside_reconciles(self, client, db):
+        """total_set_aside == income_tax_on_profit + class4_ni, exactly."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_income(client, h, 37000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        assert te is not None
+        assert te["total_set_aside"] == pytest.approx(
+            te["income_tax_on_profit"] + te["class4_ni"]
+        )
+
+    def test_no_tax_estimate_without_config(self, client):
+        """Without seeded configs, tax_estimate is None."""
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 20000.0, "date_received": d}, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["tax_estimate"] is None

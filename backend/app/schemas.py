@@ -396,6 +396,17 @@ class BusinessTaxConfigOut(BaseModel):
     mileage_threshold: int
 
 
+class SoleTraderTaxOut(BaseModel):
+    taxable_profit: float
+    income_tax_on_profit: float
+    class4_ni: float
+    class2_status: str          # "covered" | "covered_no_class4" | "below_threshold"
+    class2_due: float
+    class2_voluntary_note: str | None
+    total_set_aside: float
+    effective_rate: float
+
+
 class BusinessSummaryOut(BaseModel):
     revenue_ytd: float
     total_expenses_ytd: float
@@ -407,3 +418,4 @@ class BusinessSummaryOut(BaseModel):
     total_mileage_allowance: float
     mileage_crossover_msg: str | None
     mileage_attribution: dict[int, float] = {}  # entry_id → attributed allowance
+    tax_estimate: SoleTraderTaxOut | None = None

@@ -68,7 +68,8 @@ def seed() -> None:
             db.commit()
             print("Seeded age benchmark tables.")
 
-        if not db.query(BusinessTaxConfig).filter_by(tax_year="2026/27").first():
+        biz_cfg = db.query(BusinessTaxConfig).filter_by(tax_year="2026/27").first()
+        if not biz_cfg:
             db.add(BusinessTaxConfig(
                 tax_year="2026/27",
                 # Home office flat rates — £/month (HMRC simplified expenses)
@@ -81,10 +82,27 @@ def seed() -> None:
                 mileage_motorcycle=0.24,
                 mileage_bicycle=0.20,
                 mileage_threshold=10000,
+                # Class 4 NI (2026/27 HMRC)
+                class4_lower_limit=12570,
+                class4_upper_limit=50270,
+                class4_main_rate=0.06,
+                class4_upper_rate=0.02,
+                # Class 2 NI (2026/27 HMRC)
+                class2_small_profits_threshold=7105,
+                class2_weekly_rate=3.65,
                 source_note="HMRC simplified expenses, 2026/27. Mileage rate increased from 45p to 55p from 6 April 2026.",
             ))
             db.commit()
             print("Seeded BusinessTaxConfig for 2026/27.")
+        elif biz_cfg.class4_lower_limit is None:
+            biz_cfg.class4_lower_limit = 12570
+            biz_cfg.class4_upper_limit = 50270
+            biz_cfg.class4_main_rate = 0.06
+            biz_cfg.class4_upper_rate = 0.02
+            biz_cfg.class2_small_profits_threshold = 7105
+            biz_cfg.class2_weekly_rate = 3.65
+            db.commit()
+            print("Updated BusinessTaxConfig with Class 4/2 NI rates for 2026/27.")
 
         if not db.query(RegionalSalaryBenchmark).first():
             _R = "ONS ASHE, April 2025, released October 2025"

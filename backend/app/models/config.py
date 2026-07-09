@@ -26,6 +26,16 @@ class BusinessTaxConfig(Base):
     mileage_bicycle: Mapped[float] = mapped_column(Float, nullable=False)
     mileage_threshold: Mapped[int] = mapped_column(Integer, nullable=False)
 
+    # Class 4 NI rates — self-employed (added 2026/27)
+    class4_lower_limit: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    class4_upper_limit: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    class4_main_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    class4_upper_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Class 2 NI position
+    class2_small_profits_threshold: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    class2_weekly_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     source_note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
 

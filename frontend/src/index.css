@@ -2182,6 +2182,72 @@ button.checklist-link {
   padding: 0 1rem;
 }
 
+.biz-tax-hero {
+  margin-top: 1.5rem;
+  border-left: 4px solid var(--color-primary);
+  padding-left: 1.25rem;
+}
+
+.biz-tax-hero-amount {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin: 0.25rem 0 0.25rem;
+  letter-spacing: -0.03em;
+}
+
+.biz-tax-breakdown {
+  margin-top: 0.75rem;
+}
+
+.biz-tax-breakdown summary {
+  cursor: pointer;
+  font-size: 0.83rem;
+  color: var(--color-primary);
+  user-select: none;
+  padding: 0.15rem 0;
+}
+
+.biz-tax-breakdown-list {
+  list-style: none;
+  margin-top: 0.5rem;
+  font-size: 0.88rem;
+  color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-left: 0.25rem;
+}
+
+.biz-tax-breakdown-list li {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.3rem;
+}
+
+.biz-tax-breakdown-list li:last-child {
+  border-bottom: none;
+}
+
+.biz-tax-breakdown-list .breakdown-label {
+  color: var(--color-text-muted);
+}
+
+.biz-tax-class2-note {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin-top: 0.4rem;
+  font-style: italic;
+}
+
+.biz-tax-hero-disclaimer {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin-top: 0.75rem;
+  line-height: 1.5;
+}
+
 /* ── Mode pill ───────────────────────────────────────────── */
 .mode-pill {
   display: flex;

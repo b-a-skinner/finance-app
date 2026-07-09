@@ -32,6 +32,28 @@ class LoanPlan(Protocol):
     repayment_rate_pct: float
 
 
+class BizTaxConfig(Protocol):
+    """Sole trader NI config. Only called when all fields are confirmed non-None."""
+    class4_lower_limit: float
+    class4_upper_limit: float
+    class4_main_rate: float
+    class4_upper_rate: float
+    class2_small_profits_threshold: float
+    class2_weekly_rate: float
+
+
+@dataclass
+class SoleTraderTaxBreakdown:
+    taxable_profit: float
+    income_tax_on_profit: float
+    class4_ni: float
+    class2_status: str          # "covered" | "covered_no_class4" | "below_threshold"
+    class2_due: float           # always 0 — Class 2 is auto-granted or voluntary only
+    class2_voluntary_note: str | None
+    total_set_aside: float
+    effective_rate: float
+
+
 @dataclass
 class TakeHomeBreakdown:
     gross_annual: float
@@ -133,6 +155,66 @@ def calculate_pension_contribution(
     return (
         round(qualifying * employee_pct / 100, 2),
         round(qualifying * employer_pct / 100, 2),
+    )
+
+
+def calculate_sole_trader_tax(
+    taxable_profit: float,
+    tax_cfg: TaxConfig,
+    biz_cfg: BizTaxConfig,
+    starting_income: float = 0.0,
+) -> SoleTraderTaxBreakdown:
+    """
+    Income tax + Class 4 NI + Class 2 position for a sole trader.
+
+    Income tax is the marginal slice on [starting_income, starting_income + profit],
+    computed as calculate_income_tax(starting_income + profit) − calculate_income_tax(starting_income).
+    With the default starting_income=0 this equals income_tax(profit), but the difference
+    form means passing a real starting_income later is a one-line change at the call site.
+
+    All rates and thresholds come from config — none are hardcoded here.
+    """
+    income_tax_on_profit = round(
+        calculate_income_tax(starting_income + taxable_profit, tax_cfg)
+        - calculate_income_tax(starting_income, tax_cfg),
+        2,
+    )
+
+    # Class 4 NI: slice calculation on profit
+    class4 = 0.0
+    if taxable_profit > biz_cfg.class4_lower_limit:
+        main_slice = min(taxable_profit, biz_cfg.class4_upper_limit) - biz_cfg.class4_lower_limit
+        class4 += main_slice * biz_cfg.class4_main_rate
+    if taxable_profit > biz_cfg.class4_upper_limit:
+        class4 += (taxable_profit - biz_cfg.class4_upper_limit) * biz_cfg.class4_upper_rate
+    class4 = round(class4, 2)
+
+    # Class 2 position
+    class2_note: str | None = None
+    if taxable_profit >= biz_cfg.class4_lower_limit:
+        class2_status = "covered"
+    elif taxable_profit >= biz_cfg.class2_small_profits_threshold:
+        class2_status = "covered_no_class4"
+    else:
+        class2_status = "below_threshold"
+        annual_voluntary = round(biz_cfg.class2_weekly_rate * 52, 2)
+        class2_note = (
+            f"Voluntary Class 2 contributions (£{biz_cfg.class2_weekly_rate:.2f}/week, "
+            f"£{annual_voluntary:.2f}/year) could protect your State Pension record."
+        )
+
+    total_set_aside = round(income_tax_on_profit + class4, 2)
+    effective_rate = round(total_set_aside / taxable_profit, 4) if taxable_profit > 0 else 0.0
+
+    return SoleTraderTaxBreakdown(
+        taxable_profit=taxable_profit,
+        income_tax_on_profit=income_tax_on_profit,
+        class4_ni=class4,
+        class2_status=class2_status,
+        class2_due=0.0,
+        class2_voluntary_note=class2_note,
+        total_set_aside=total_set_aside,
+        effective_rate=effective_rate,
     )
 
 
