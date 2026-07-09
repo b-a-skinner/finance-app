@@ -7,12 +7,7 @@ import {
   Tip, AddButtons, IncomeModal, ExpenseModal,
   fmtMiles,
 } from '../components/BusinessShared';
-
-const CLASS2_STATUS_LABELS = {
-  covered:           'No Class 2 charge — qualifying year granted automatically.',
-  covered_no_class4: 'No Class 2 or Class 4 to pay — qualifying year still counts toward State Pension.',
-  below_threshold:   'Below small profits threshold — no automatic credit this year.',
-};
+import { class2EducationSnippet, CLASS2_PENSION_EXPLAINER } from '../utils/class2Education';
 
 export default function Business() {
   const { apiFetch, businessType } = useAuth();
@@ -192,14 +187,17 @@ export default function Business() {
                   <span className="breakdown-label">Class 4 NI</span>
                   <span>{gbp(summary.tax_estimate.class4_ni)}</span>
                 </li>
-                <li>
+                <li className="breakdown-class2">
                   <span className="breakdown-label">Class 2 NI</span>
-                  <span>{CLASS2_STATUS_LABELS[summary.tax_estimate.class2_status]}</span>
+                  <p className="biz-class2-snippet">
+                    {class2EducationSnippet(summary.tax_estimate.class2_status, taxConfig)}
+                  </p>
+                  <details className="biz-class2-explainer">
+                    <summary>What does this mean for my State Pension?</summary>
+                    <p>{CLASS2_PENSION_EXPLAINER}</p>
+                  </details>
                 </li>
               </ul>
-              {summary.tax_estimate.class2_voluntary_note && (
-                <p className="biz-tax-class2-note">{summary.tax_estimate.class2_voluntary_note}</p>
-              )}
             </details>
             <p className="biz-tax-hero-disclaimer">
               This figure assumes self-employment income only and doesn&rsquo;t account for other income

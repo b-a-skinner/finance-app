@@ -2253,11 +2253,35 @@ button.checklist-link {
   color: var(--color-text-muted);
 }
 
-.biz-tax-class2-note {
-  font-size: 0.78rem;
+.biz-tax-breakdown-list .breakdown-class2 {
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.biz-class2-snippet {
+  font-size: 0.83rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.biz-class2-explainer {
+  margin-top: 0.1rem;
+}
+
+.biz-class2-explainer > summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--color-primary);
+  user-select: none;
+  padding: 0.1rem 0;
+}
+
+.biz-class2-explainer > p {
+  font-size: 0.8rem;
   color: var(--color-text-muted);
+  line-height: 1.55;
   margin-top: 0.4rem;
-  font-style: italic;
 }
 
 .biz-tax-hero-disclaimer {
