@@ -719,12 +719,22 @@ export default function Business() {
               <Tip text="Allowable expenses (including mileage allowance and home office flat rate) reduce your taxable profit." />
             </p>
             <p className="business-metric">{gbp(summary.allowable_expenses_ytd)}</p>
-            {summary.total_business_miles > 0 && (
-              <p className="biz-metric-sub">
-                {fmtMiles(summary.total_business_miles)} business miles · {gbp(summary.total_mileage_allowance)} mileage
-                {summary.mileage_crossover_msg && ` · ${summary.mileage_crossover_msg}`}
-              </p>
-            )}
+            {summary.total_business_miles > 0 && (() => {
+              const cashAllowable = Math.round((summary.allowable_expenses_ytd - summary.total_mileage_allowance) * 100) / 100;
+              return (
+                <div className="biz-allowable-breakdown">
+                  {cashAllowable > 0 && (
+                    <p className="biz-metric-sub">{gbp(cashAllowable)} expenses</p>
+                  )}
+                  <p className="biz-metric-sub">
+                    {gbp(summary.total_mileage_allowance)} mileage allowance ({fmtMiles(summary.total_business_miles)} business miles)
+                  </p>
+                  {summary.mileage_crossover_msg && (
+                    <p className="biz-metric-sub biz-metric-note">{summary.mileage_crossover_msg}</p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -733,7 +743,7 @@ export default function Business() {
           <div className="card">
             <p className="card-title">Money left after all costs</p>
             <p className={`business-metric ${cashClass}`}>{gbp(summary.cash_profit)}</p>
-            <p className="biz-metric-sub">Revenue minus cash expenses</p>
+            <p className="biz-metric-sub">Revenue minus total expenses</p>
           </div>
           <div className="card">
             <p className="card-title">

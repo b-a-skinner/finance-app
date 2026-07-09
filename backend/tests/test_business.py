@@ -887,3 +887,42 @@ class TestSoleTraderTax:
 
         body = client.get(SUMMARY_URL, headers=h).json()
         assert body["tax_estimate"] is None
+
+
+# ---------------------------------------------------------------------------
+# Presentation consistency — card breakdown values match the headline totals
+# ---------------------------------------------------------------------------
+
+class TestPresentationConsistency:
+    """No calculation changes — just asserting that the displayed components sum correctly."""
+
+    def test_allowable_card_breakdown_sums_to_headline(self, client, db):
+        """cash allowable + mileage allowance == allowable_expenses_ytd."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 10000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 500.0, "date_incurred": d, "category": "software", "is_allowable": True,
+        }, headers=h)
+        _post_mileage(client, h, d, 1000, "car_van")
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        cash_allowable = round(body["allowable_expenses_ytd"] - body["total_mileage_allowance"], 2)
+        assert pytest.approx(cash_allowable + body["total_mileage_allowance"]) == body["allowable_expenses_ytd"]
+        assert body["mileage_crossover_msg"] is not None
+
+    def test_money_left_equals_revenue_minus_total_expenses(self, client):
+        """cash_profit == revenue_ytd − total_expenses_ytd (both exclude mileage)."""
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 300.0, "date_incurred": d, "category": "software", "is_allowable": True,
+        }, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 200.0, "date_incurred": d, "category": "equipment", "is_allowable": False,
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["cash_profit"] == pytest.approx(body["revenue_ytd"] - body["total_expenses_ytd"])
