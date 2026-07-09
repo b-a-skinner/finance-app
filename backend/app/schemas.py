@@ -406,3 +406,4 @@ class BusinessSummaryOut(BaseModel):
     total_business_miles: int
     total_mileage_allowance: float
     mileage_crossover_msg: str | None
+    mileage_attribution: dict[int, float] = {}  # entry_id → attributed allowance

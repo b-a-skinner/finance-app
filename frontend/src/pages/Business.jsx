@@ -35,6 +35,25 @@ const DUAL_CATS           = ['home_office','other'];
 
 const VEHICLE_LABELS = { car_van: 'car/van', motorcycle: 'motorcycle', bicycle: 'bicycle' };
 
+/**
+ * Returns a human-readable rate note for a vehicle type, read entirely from config.
+ * Two-tier detection: presence of first/over/threshold keys (no hardcoded vehicle names).
+ */
+function vehicleRateNote(vehicleType, taxConfig) {
+  if (!taxConfig || !vehicleType) return null;
+  const RATES = {
+    car_van:    { first: taxConfig.mileage_car_van_first, over: taxConfig.mileage_car_van_over, threshold: taxConfig.mileage_threshold },
+    motorcycle: { rate: taxConfig.mileage_motorcycle },
+    bicycle:    { rate: taxConfig.mileage_bicycle },
+  };
+  const info = RATES[vehicleType];
+  if (!info) return null;
+  if ('rate' in info) {
+    return `${Math.round(info.rate * 100)}p per mile.`;
+  }
+  return `${Math.round(info.first * 100)}p per mile for the first ${info.threshold.toLocaleString('en-GB')} miles this tax year, then ${Math.round(info.over * 100)}p.`;
+}
+
 const BAND_LABELS = {
   '25_50':    '25–50 hours/month',
   '51_100':   '51–100 hours/month',
@@ -415,19 +434,9 @@ function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
                 <option value="motorcycle">Motorcycle</option>
                 <option value="bicycle">Bicycle</option>
               </select>
-              {taxConfig && form.vehicle_type === 'car_van' && (
+              {vehicleRateNote(form.vehicle_type, taxConfig) && (
                 <p className="form-hint-inline" style={{ marginTop: '0.25rem' }}>
-                  {taxConfig.mileage_car_van_first * 100}p/mile (first {taxConfig.mileage_threshold.toLocaleString('en-GB')} miles), {taxConfig.mileage_car_van_over * 100}p/mile above
-                </p>
-              )}
-              {taxConfig && form.vehicle_type === 'motorcycle' && (
-                <p className="form-hint-inline" style={{ marginTop: '0.25rem' }}>
-                  {taxConfig.mileage_motorcycle * 100}p/mile (flat rate)
-                </p>
-              )}
-              {taxConfig && form.vehicle_type === 'bicycle' && (
-                <p className="form-hint-inline" style={{ marginTop: '0.25rem' }}>
-                  {taxConfig.mileage_bicycle * 100}p/mile (flat rate)
+                  {vehicleRateNote(form.vehicle_type, taxConfig)}
                 </p>
               )}
             </div>
@@ -743,17 +752,28 @@ export default function Business() {
                 const isFlatHO  = !isIncome && entry.expense_method === 'home_office_flat';
                 const label     = activityLabel(entry, taxConfig);
                 const detail    = activityDetail(entry, taxConfig);
+                const mileAttr  = isMile ? (summary?.mileage_attribution?.[entry.id] ?? 0) : null;
 
                 return (
                   <li key={`${entry._type}-${entry.id}`} className="item-row business-activity-row">
                     <div className="item-info">
                       <span className="item-name">{label}</span>
-                      <span className="item-detail">{detail}</span>
-                    </div>
-                    {!isMile && !isFlatHO && (
-                      <span className={`business-amount ${isIncome ? 'business-amount--income' : 'business-amount--expense'}`}>
-                        {isIncome ? '+' : '−'}{gbp(entry.amount)}
+                      <span className="item-detail">
+                        {detail}
+                        {isMile && (
+                          <span className="mileage-cumulative-note">
+                            {' '}
+                            <Tip text="Calculated across your cumulative miles this tax year." />
+                          </span>
+                        )}
                       </span>
+                    </div>
+                    {isIncome ? (
+                      <span className="business-amount business-amount--income">+{gbp(entry.amount)}</span>
+                    ) : isMile ? (
+                      <span className="business-amount business-amount--expense">−{gbp(mileAttr)}</span>
+                    ) : isFlatHO ? null : (
+                      <span className="business-amount business-amount--expense">−{gbp(entry.amount)}</span>
                     )}
                     <div className="item-actions">
                       <button className="btn-sm" onClick={() => startEdit(entry._type, entry)}>Edit</button>

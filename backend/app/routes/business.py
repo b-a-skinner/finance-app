@@ -51,26 +51,93 @@ def _home_office_flat_rate(band: str | None, cfg: BusinessTaxConfig) -> float:
     }.get(band or "", 0.0)
 
 
-def _compute_mileage(car_van: int, moto: int, bike: int, cfg: BusinessTaxConfig) -> tuple[float, str | None]:
-    threshold = cfg.mileage_threshold
-    if car_van <= threshold:
-        cv_allowance = car_van * cfg.mileage_car_van_first
-    else:
-        cv_allowance = (threshold * cfg.mileage_car_van_first
-                        + (car_van - threshold) * cfg.mileage_car_van_over)
+def _vehicle_rate_info(vehicle_type: str, cfg: BusinessTaxConfig) -> dict | None:
+    """
+    Returns the rate structure for a vehicle type from config.
 
-    total = round(cv_allowance + moto * cfg.mileage_motorcycle + bike * cfg.mileage_bicycle, 2)
+    Tiered types have both first/over rates and a threshold — the two-tier flag
+    is implicit in having these keys (not derived from the vehicle name).
+    Flat types have only a single rate.
+    Returns None for unknown vehicle types.
+    """
+    lookup: dict[str, dict] = {
+        "car_van":    {"tiered": True,  "first": cfg.mileage_car_van_first,
+                       "over": cfg.mileage_car_van_over, "threshold": cfg.mileage_threshold},
+        "motorcycle": {"tiered": False, "rate": cfg.mileage_motorcycle},
+        "bicycle":    {"tiered": False, "rate": cfg.mileage_bicycle},
+    }
+    return lookup.get(vehicle_type)
 
-    if car_van > 0 and car_van < threshold:
-        remaining = threshold - car_van
-        msg = f"{remaining:,} miles remaining at {int(cfg.mileage_car_van_first * 100)}p/mile"
-    elif car_van >= threshold:
-        over = car_van - threshold
-        msg = f"Threshold reached — {over:,} miles at {int(cfg.mileage_car_van_over * 100)}p/mile"
-    else:
-        msg = None
 
-    return total, msg
+def _attribute_mileage_entries(
+    entries: list,
+    cfg: BusinessTaxConfig,
+) -> tuple[float, dict[int, float]]:
+    """
+    Returns (annual_allowance_total, {entry_id: attributed_value}).
+
+    Tiered vehicle types accrue cumulative miles against their own independent
+    per-type threshold pool, ordered deterministically by (date_incurred, id).
+    Flat-rate types: attributed = miles × rate, no cumulative dependency.
+    """
+    sorted_entries = sorted(entries, key=lambda e: (e.date_incurred, e.id))
+
+    cumulative: dict[str, int] = {}   # vehicle_type → cumulative miles (tiered types only)
+    per_entry:  dict[int, float] = {}
+
+    for e in sorted_entries:
+        miles = e.business_miles or 0
+        vt    = e.vehicle_type or ""
+        info  = _vehicle_rate_info(vt, cfg)
+
+        if info is None:
+            per_entry[e.id] = 0.0
+            continue
+
+        if info["tiered"]:
+            threshold   = info["threshold"]
+            before      = cumulative.get(vt, 0)
+            after       = before + miles
+            lower_miles = max(0, min(after, threshold) - before)
+            upper_miles = miles - lower_miles
+            value       = round(lower_miles * info["first"] + upper_miles * info["over"], 2)
+            cumulative[vt] = after
+        else:
+            value = round(miles * info["rate"], 2)
+
+        per_entry[e.id] = value
+
+    annual_total = round(sum(per_entry.values()), 2)
+    return annual_total, per_entry
+
+
+def _mileage_crossover_msg(mileage_entries: list, cfg: BusinessTaxConfig) -> str | None:
+    """Crossover / threshold status message for tiered vehicle types."""
+    type_totals: dict[str, int] = {}
+    for e in mileage_entries:
+        info = _vehicle_rate_info(e.vehicle_type or "", cfg)
+        if info and info["tiered"]:
+            vt = e.vehicle_type
+            type_totals[vt] = type_totals.get(vt, 0) + (e.business_miles or 0)
+
+    if not type_totals:
+        return None
+
+    parts = []
+    for vt in sorted(type_totals):
+        total = type_totals[vt]
+        if total == 0:
+            continue
+        info      = _vehicle_rate_info(vt, cfg)
+        threshold = info["threshold"]
+        if total < threshold:
+            remaining = threshold - total
+            parts.append(f"{remaining:,} miles remaining at {int(info['first'] * 100)}p/mile")
+        else:
+            over = total - threshold
+            parts.append(f"Threshold reached — {over:,} miles at {int(info['over'] * 100)}p/mile")
+
+    return "; ".join(parts) if parts else None
 
 
 # ---------------------------------------------------------------------------
@@ -247,51 +314,40 @@ def get_business_summary(
 
     revenue = round(sum(i.amount for i in income_ytd), 2)
 
-    cash_expenses   = 0.0
-    allowable_cash  = 0.0
-    car_van_miles   = 0
-    moto_miles      = 0
-    bike_miles      = 0
+    mileage_entries = [e for e in expenses_ytd if e.expense_method == "mileage"]
+    other_expenses  = [e for e in expenses_ytd if e.expense_method != "mileage"]
 
-    for e in expenses_ytd:
+    # Per-entry mileage attribution (shared function — single source of truth)
+    if cfg and mileage_entries:
+        mileage_allowance, mileage_attribution = _attribute_mileage_entries(mileage_entries, cfg)
+        crossover_msg = _mileage_crossover_msg(mileage_entries, cfg)
+    else:
+        mileage_allowance  = 0.0
+        mileage_attribution: dict[int, float] = {}
+        crossover_msg      = None
+
+    cash_expenses  = 0.0
+    allowable_cash = 0.0
+
+    for e in other_expenses:
         method = e.expense_method
 
-        if method == "mileage":
-            miles = e.business_miles or 0
-            vt    = e.vehicle_type or ""
-            if vt == "car_van":
-                car_van_miles += miles
-            elif vt == "motorcycle":
-                moto_miles += miles
-            elif vt == "bicycle":
-                bike_miles += miles
-            # mileage expenses have amount=0, don't add to cash
-
-        elif method == "home_office_flat":
-            # no cash outlay; allowable = HMRC flat rate for the month
+        if method == "home_office_flat":
             if cfg:
                 allowable_cash += _home_office_flat_rate(e.home_office_hours_band, cfg)
 
         elif method in ("home_office_actual", "percentage"):
-            cash_expenses  += e.amount
+            cash_expenses += e.amount
             pct = (e.business_use_percent or 100) / 100
             if e.is_allowable:
                 allowable_cash += round(e.amount * pct, 2)
 
         else:
-            # Standard expense
             cash_expenses += e.amount
             if e.is_allowable:
                 allowable_cash += e.amount
 
-    # Cumulative mileage allowance
-    if cfg and (car_van_miles or moto_miles or bike_miles):
-        mileage_allowance, crossover_msg = _compute_mileage(car_van_miles, moto_miles, bike_miles, cfg)
-    else:
-        mileage_allowance = 0.0
-        crossover_msg     = None
-
-    total_miles            = car_van_miles + moto_miles + bike_miles
+    total_miles            = sum(e.business_miles or 0 for e in mileage_entries)
     allowable_expenses_ytd = round(allowable_cash + mileage_allowance, 2)
     total_expenses_ytd     = round(cash_expenses, 2)
 
@@ -305,4 +361,5 @@ def get_business_summary(
         total_business_miles=total_miles,
         total_mileage_allowance=mileage_allowance,
         mileage_crossover_msg=crossover_msg,
+        mileage_attribution=mileage_attribution,
     )

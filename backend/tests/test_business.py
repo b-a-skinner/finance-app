@@ -517,3 +517,157 @@ class TestTaxConfigEndpoint:
     def test_requires_auth(self, client):
         r = client.get(TAX_CFG_URL)
         assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Per-entry mileage attribution
+# ---------------------------------------------------------------------------
+
+def _post_mileage(client, headers, date_str, miles, vehicle_type):
+    r = client.post(EXPENSE_URL, json={
+        "amount": 0, "date_incurred": date_str, "category": "travel",
+        "is_allowable": True, "expense_method": "mileage",
+        "business_miles": miles, "vehicle_type": vehicle_type,
+    }, headers=headers)
+    assert r.status_code == 201, r.json()
+    return r.json()["id"]
+
+
+class TestMileageAttribution:
+    """Per-entry attribution — all rates and thresholds read from seeded config."""
+
+    def test_two_entries_straddling_threshold_total_is_correct(self, client, db):
+        """Two 6,000-mile car/van entries → £6,000 total (not 2 × £3,300 = £6,600).
+        Second entry straddles: 4,000 at lower rate, 2,000 at upper rate."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 10000.0, "date_received": d}, headers=h)
+
+        id1 = _post_mileage(client, h, d, 6000, "car_van")
+        id2 = _post_mileage(client, h, d, 6000, "car_van")
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        attr = body["mileage_attribution"]
+
+        # Entry 1: 0 → 6,000 (all lower band) = 6,000 × 0.55 = £3,300
+        assert attr[str(id1)] == pytest.approx(3300.0)
+        # Entry 2: 6,000 → 12,000; lower=4,000, upper=2,000 = 4000×0.55+2000×0.25 = £2,700
+        assert attr[str(id2)] == pytest.approx(2700.0)
+        assert body["total_mileage_allowance"] == pytest.approx(6000.0)
+
+    def test_single_entry_straddling_threshold(self, client, db):
+        """Cumulative at 9,500, then log 1,000 → (500 × lower) + (500 × upper)."""
+        seed_biz_config(db)
+        h = auth(client)
+        tax_start = _this_year_april_6()
+        d1 = tax_start.isoformat()
+        d2 = (tax_start + timedelta(days=1)).isoformat()
+
+        client.post(INCOME_URL, json={"amount": 10000.0, "date_received": d1}, headers=h)
+        _post_mileage(client, h, d1, 9500, "car_van")
+        id2 = _post_mileage(client, h, d2, 1000, "car_van")
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        attr = body["mileage_attribution"]
+
+        # Entry 2: before=9500, after=10500; lower=min(10500,10000)-9500=500, upper=500
+        assert attr[str(id2)] == pytest.approx(500 * 0.55 + 500 * 0.25)
+
+    def test_reconciliation_guarantee(self, client, db):
+        """Sum of all per-entry attributed values equals the annual total exactly."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 50000.0, "date_received": d}, headers=h)
+
+        for miles, vtype in [(3000, "car_van"), (2000, "motorcycle"), (8000, "car_van"), (500, "bicycle")]:
+            _post_mileage(client, h, d, miles, vtype)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        attr = body["mileage_attribution"]
+
+        assert sum(attr.values()) == pytest.approx(body["total_mileage_allowance"])
+
+    def test_flat_rate_vehicle_no_threshold(self, client, db):
+        """Motorcycle: each entry = miles × rate, cumulative miles never matter."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": d}, headers=h)
+
+        id1 = _post_mileage(client, h, d, 20000, "motorcycle")   # far above any threshold
+        id2 = _post_mileage(client, h, d, 5000,  "motorcycle")
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        attr = body["mileage_attribution"]
+
+        assert attr[str(id1)] == pytest.approx(20000 * 0.24)
+        assert attr[str(id2)] == pytest.approx(5000  * 0.24)
+
+    def test_mixed_car_and_motorcycle_independent(self, client, db):
+        """Car miles accrue against the tiered threshold; motorcycle stays flat.
+        Neither pool affects the other."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 20000.0, "date_received": d}, headers=h)
+
+        car_id   = _post_mileage(client, h, d, 12000, "car_van")      # 10k at 0.55 + 2k at 0.25
+        moto_id  = _post_mileage(client, h, d, 3000,  "motorcycle")   # flat 3k × 0.24
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        attr = body["mileage_attribution"]
+
+        expected_car  = round(10000 * 0.55 + 2000 * 0.25, 2)   # £6,000
+        expected_moto = round(3000 * 0.24, 2)                   # £720
+        assert attr[str(car_id)]  == pytest.approx(expected_car)
+        assert attr[str(moto_id)] == pytest.approx(expected_moto)
+        assert body["total_mileage_allowance"] == pytest.approx(expected_car + expected_moto)
+
+    def test_per_type_pools_are_independent(self, client, db):
+        """Two tiered vehicle types each maintain their own cumulative pool.
+        In our config car_van is the only tiered type; this test verifies that
+        a car_van entry and a motorcycle entry don't share the tiered pool
+        (motorcycle uses a flat rate regardless of car_van cumulative miles)."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 10000.0, "date_received": d}, headers=h)
+
+        # Log 9,000 car/van miles — 1,000 remaining in lower band
+        car_id = _post_mileage(client, h, d, 9000, "car_van")
+        # Motorcycle miles never affect car/van cumulative
+        moto_id = _post_mileage(client, h, d, 5000, "motorcycle")
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        attr = body["mileage_attribution"]
+
+        # car: all 9,000 in lower band (threshold not reached)
+        assert attr[str(car_id)]  == pytest.approx(9000 * 0.55)
+        # moto: flat rate regardless of any car/van cumulative
+        assert attr[str(moto_id)] == pytest.approx(5000 * 0.24)
+        assert body["mileage_crossover_msg"] is not None  # 1,000 remaining message
+
+    def test_deterministic_ordering_same_day(self, client, db):
+        """Same-day entries are stable across repeated calls (sorted by id as tiebreaker)."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 10000.0, "date_received": d}, headers=h)
+
+        # Both logged on same day — ordering must be by id (ascending)
+        id1 = _post_mileage(client, h, d, 9000, "car_van")
+        id2 = _post_mileage(client, h, d, 2000, "car_van")
+
+        body1 = client.get(SUMMARY_URL, headers=h).json()
+        body2 = client.get(SUMMARY_URL, headers=h).json()
+
+        # Values must be identical across two calls
+        assert body1["mileage_attribution"] == body2["mileage_attribution"]
+
+        # With id1 first: id1=9000×0.55=4950, id2=1000×0.55+1000×0.25=800
+        attr = body1["mileage_attribution"]
+        assert attr[str(id1)] == pytest.approx(9000 * 0.55)
+        assert attr[str(id2)] == pytest.approx(1000 * 0.55 + 1000 * 0.25)
+        assert body1["total_mileage_allowance"] == pytest.approx(9000 * 0.55 + 1000 * 0.55 + 1000 * 0.25)

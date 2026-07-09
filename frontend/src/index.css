@@ -2159,6 +2159,13 @@ button.checklist-link {
   flex-shrink: 0;
 }
 
+/* ── Business: inline mileage cumulative note ────────────── */
+.mileage-cumulative-note {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
 /* ── Business: live allowable preview ───────────────────── */
 .allowable-preview {
   color: var(--color-positive);
