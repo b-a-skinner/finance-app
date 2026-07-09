@@ -610,6 +610,7 @@ export default function Business() {
   const [modal,     setModal]     = useState(null);
   const [editItem,  setEditItem]  = useState(null);
   const [actionError, setActionError] = useState('');
+  const [tab, setTab] = useState('dashboard');
 
   const fetchAll = useCallback(async () => {
     const [sRes, iRes, eRes, cfgRes] = await Promise.all([
@@ -646,12 +647,10 @@ export default function Business() {
     }
   }
 
-  const activity = [
+  const allActivity = [
     ...income.map(i => ({ ...i, _type: 'income',  _date: i.date_received })),
     ...expenses.map(e => ({ ...e, _type: 'expense', _date: e.date_incurred })),
-  ]
-    .sort((a, b) => b._date.localeCompare(a._date))
-    .slice(0, 10);
+  ].sort((a, b) => b._date.localeCompare(a._date));
 
   const disclaimer = (
     <p className="biz-disclaimer">
@@ -695,155 +694,181 @@ export default function Business() {
   const cashClass    = summary.cash_profit    >= 0 ? 'business-metric--positive' : 'business-metric--negative';
   const taxableClass = summary.taxable_profit >= 0 ? 'business-metric--positive' : 'business-metric--negative';
 
+  const activityList = (entries) => entries.map(entry => {
+    const isIncome = entry._type === 'income';
+    const isMile   = !isIncome && entry.expense_method === 'mileage';
+    const isFlatHO = !isIncome && entry.expense_method === 'home_office_flat';
+    const label    = activityLabel(entry, taxConfig);
+    const detail   = activityDetail(entry, taxConfig);
+    const mileAttr = isMile ? (summary?.mileage_attribution?.[entry.id] ?? 0) : null;
+    return (
+      <li key={`${entry._type}-${entry.id}`} className="item-row business-activity-row">
+        <div className="item-info">
+          <span className="item-name">{label}</span>
+          <span className="item-detail">
+            {detail}
+            {isMile && (
+              <span className="mileage-cumulative-note">
+                {' '}<Tip text="Calculated across your cumulative miles this tax year." />
+              </span>
+            )}
+          </span>
+        </div>
+        {isIncome ? (
+          <span className="business-amount business-amount--income">+{gbp(entry.amount)}</span>
+        ) : isMile ? (
+          <span className="business-amount business-amount--expense">−{gbp(mileAttr)}</span>
+        ) : isFlatHO ? null : (
+          <span className="business-amount business-amount--expense">−{gbp(entry.amount)}</span>
+        )}
+        <div className="item-actions">
+          <button className="btn-sm" onClick={() => startEdit(entry._type, entry)}>Edit</button>
+          <button className="btn-sm btn-danger" onClick={() => handleDelete(entry._type, entry.id)}>Delete</button>
+        </div>
+      </li>
+    );
+  });
+
   return (
     <>
       <NavBar />
       <main className="resource-page business-page">
-        <h1 className="page-title">Business</h1>
+        <div className="biz-page-header">
+          <h1 className="page-title">Business</h1>
+          <AddButtons onIncome={openIncomeModal} onExpense={openExpenseModal} />
+        </div>
 
         {actionError && <div className="error-banner">{actionError}</div>}
 
-        {/* Summary — 3 cards */}
-        <div className="cards-grid business-summary-grid">
-          <div className="card">
-            <p className="card-title">Revenue this year</p>
-            <p className="business-metric">{gbp(summary.revenue_ytd)}</p>
-          </div>
-          <div className="card">
-            <p className="card-title">Total expenses</p>
-            <p className="business-metric">{gbp(summary.total_expenses_ytd)}</p>
-          </div>
-          <div className="card">
-            <p className="card-title">
-              Allowable expenses
-              <Tip text="Allowable expenses (including mileage allowance and home office flat rate) reduce your taxable profit." />
-            </p>
-            <p className="business-metric">{gbp(summary.allowable_expenses_ytd)}</p>
-            {summary.total_business_miles > 0 && (() => {
-              const cashAllowable = Math.round((summary.allowable_expenses_ytd - summary.total_mileage_allowance) * 100) / 100;
-              return (
-                <div className="biz-allowable-breakdown">
-                  {cashAllowable > 0 && (
-                    <p className="biz-metric-sub">{gbp(cashAllowable)} expenses</p>
-                  )}
-                  <p className="biz-metric-sub">
-                    {gbp(summary.total_mileage_allowance)} mileage allowance ({fmtMiles(summary.total_business_miles)} business miles)
-                  </p>
-                  {summary.mileage_crossover_msg && (
-                    <p className="biz-metric-sub biz-metric-note">{summary.mileage_crossover_msg}</p>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
+        <div className="biz-tabs" role="tablist">
+          <button
+            role="tab"
+            aria-selected={tab === 'dashboard'}
+            className={`biz-tab${tab === 'dashboard' ? ' biz-tab--active' : ''}`}
+            onClick={() => setTab('dashboard')}
+          >
+            Dashboard
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === 'cashflow'}
+            className={`biz-tab${tab === 'cashflow' ? ' biz-tab--active' : ''}`}
+            onClick={() => setTab('cashflow')}
+          >
+            Cashflow
+          </button>
         </div>
 
-        {/* Profit split — 2 cards */}
-        <div className="biz-profit-grid">
-          <div className="card">
-            <p className="card-title">Money left after all costs</p>
-            <p className={`business-metric ${cashClass}`}>{gbp(summary.cash_profit)}</p>
-            <p className="biz-metric-sub">Revenue minus total expenses</p>
-          </div>
-          <div className="card">
-            <p className="card-title">
-              Taxable profit (estimated)
-              <Tip text="Revenue minus all allowable expenses (including mileage and home office). This is what HMRC income tax and Class 4 NI are calculated on." />
-            </p>
-            <p className={`business-metric ${taxableClass}`}>{gbp(summary.taxable_profit)}</p>
-            <p className="biz-metric-sub">Revenue minus allowable expenses</p>
-          </div>
-        </div>
+        {tab === 'dashboard' && (
+          <>
+            {/* Summary — 3 cards */}
+            <div className="cards-grid business-summary-grid">
+              <div className="card">
+                <p className="card-title">Revenue this year</p>
+                <p className="business-metric">{gbp(summary.revenue_ytd)}</p>
+              </div>
+              <div className="card">
+                <p className="card-title">Total expenses</p>
+                <p className="business-metric">{gbp(summary.total_expenses_ytd)}</p>
+              </div>
+              <div className="card">
+                <p className="card-title">
+                  Allowable expenses
+                  <Tip text="Allowable expenses (including mileage allowance and home office flat rate) reduce your taxable profit." />
+                </p>
+                <p className="business-metric">{gbp(summary.allowable_expenses_ytd)}</p>
+                {summary.total_business_miles > 0 && (() => {
+                  const cashAllowable = Math.round((summary.allowable_expenses_ytd - summary.total_mileage_allowance) * 100) / 100;
+                  return (
+                    <div className="biz-allowable-breakdown">
+                      {cashAllowable > 0 && (
+                        <p className="biz-metric-sub">{gbp(cashAllowable)} expenses</p>
+                      )}
+                      <p className="biz-metric-sub">
+                        {gbp(summary.total_mileage_allowance)} mileage allowance ({fmtMiles(summary.total_business_miles)} business miles)
+                      </p>
+                      {summary.mileage_crossover_msg && (
+                        <p className="biz-metric-sub biz-metric-note">{summary.mileage_crossover_msg}</p>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
 
-        {/* Tax estimate hero */}
-        {summary.tax_estimate && summary.tax_estimate.taxable_profit > 0 && (
-          <div className="card biz-tax-hero">
-            <p className="card-title">
-              Set aside for your tax bill
-              <Tip text="Income tax + Class 4 NI on your taxable profit. Class 2 NI is shown separately — it's either automatic or voluntary." />
-            </p>
-            <p className="biz-tax-hero-amount">{gbp(summary.tax_estimate.total_set_aside)}</p>
-            <p className="biz-metric-sub">
-              {(summary.tax_estimate.effective_rate * 100).toFixed(1)}% effective rate on{' '}
-              {gbp(summary.tax_estimate.taxable_profit)} taxable profit
-            </p>
+            {/* Profit split — 2 cards */}
+            <div className="biz-profit-grid">
+              <div className="card">
+                <p className="card-title">Money left after all costs</p>
+                <p className={`business-metric ${cashClass}`}>{gbp(summary.cash_profit)}</p>
+                <p className="biz-metric-sub">Revenue minus total expenses</p>
+              </div>
+              <div className="card">
+                <p className="card-title">
+                  Taxable profit (estimated)
+                  <Tip text="Revenue minus all allowable expenses (including mileage and home office). This is what HMRC income tax and Class 4 NI are calculated on." />
+                </p>
+                <p className={`business-metric ${taxableClass}`}>{gbp(summary.taxable_profit)}</p>
+                <p className="biz-metric-sub">Revenue minus allowable expenses</p>
+              </div>
+            </div>
 
-            <details className="biz-tax-breakdown">
-              <summary>Show breakdown</summary>
-              <ul className="biz-tax-breakdown-list">
-                <li>
-                  <span className="breakdown-label">Income tax</span>
-                  <span>{gbp(summary.tax_estimate.income_tax_on_profit)}</span>
-                </li>
-                <li>
-                  <span className="breakdown-label">Class 4 NI</span>
-                  <span>{gbp(summary.tax_estimate.class4_ni)}</span>
-                </li>
-                <li>
-                  <span className="breakdown-label">Class 2 NI</span>
-                  <span>{CLASS2_STATUS_LABELS[summary.tax_estimate.class2_status]}</span>
-                </li>
-              </ul>
-              {summary.tax_estimate.class2_voluntary_note && (
-                <p className="biz-tax-class2-note">{summary.tax_estimate.class2_voluntary_note}</p>
-              )}
-            </details>
+            {/* Tax estimate hero */}
+            {summary.tax_estimate && summary.tax_estimate.taxable_profit > 0 && (
+              <div className="card biz-tax-hero">
+                <p className="card-title">
+                  Set aside for your tax bill
+                  <Tip text="Income tax + Class 4 NI on your taxable profit. Class 2 NI is shown separately — it's either automatic or voluntary." />
+                </p>
+                <p className="biz-tax-hero-amount">{gbp(summary.tax_estimate.total_set_aside)}</p>
+                <p className="biz-metric-sub">
+                  {(summary.tax_estimate.effective_rate * 100).toFixed(1)}% effective rate on{' '}
+                  {gbp(summary.tax_estimate.taxable_profit)} taxable profit
+                </p>
+                <details className="biz-tax-breakdown">
+                  <summary>Show breakdown</summary>
+                  <ul className="biz-tax-breakdown-list">
+                    <li>
+                      <span className="breakdown-label">Income tax</span>
+                      <span>{gbp(summary.tax_estimate.income_tax_on_profit)}</span>
+                    </li>
+                    <li>
+                      <span className="breakdown-label">Class 4 NI</span>
+                      <span>{gbp(summary.tax_estimate.class4_ni)}</span>
+                    </li>
+                    <li>
+                      <span className="breakdown-label">Class 2 NI</span>
+                      <span>{CLASS2_STATUS_LABELS[summary.tax_estimate.class2_status]}</span>
+                    </li>
+                  </ul>
+                  {summary.tax_estimate.class2_voluntary_note && (
+                    <p className="biz-tax-class2-note">{summary.tax_estimate.class2_voluntary_note}</p>
+                  )}
+                </details>
+                <p className="biz-tax-hero-disclaimer">
+                  This figure assumes self-employment income only and doesn&rsquo;t account for other income
+                  you may have. This is a calculation tool, not tax advice.
+                </p>
+              </div>
+            )}
 
-            <p className="biz-tax-hero-disclaimer">
-              This figure assumes self-employment income only and doesn&rsquo;t account for other income
-              you may have. This is a calculation tool, not tax advice.
-            </p>
-          </div>
+            {disclaimer}
+          </>
         )}
 
-        <AddButtons onIncome={openIncomeModal} onExpense={openExpenseModal} />
-
-        {/* Recent activity */}
-        {activity.length > 0 && (
-          <div className="card" style={{ marginTop: '1.5rem' }}>
-            <p className="card-title">Recent activity</p>
-            <ul className="item-list">
-              {activity.map(entry => {
-                const isIncome  = entry._type === 'income';
-                const isMile    = !isIncome && entry.expense_method === 'mileage';
-                const isFlatHO  = !isIncome && entry.expense_method === 'home_office_flat';
-                const label     = activityLabel(entry, taxConfig);
-                const detail    = activityDetail(entry, taxConfig);
-                const mileAttr  = isMile ? (summary?.mileage_attribution?.[entry.id] ?? 0) : null;
-
-                return (
-                  <li key={`${entry._type}-${entry.id}`} className="item-row business-activity-row">
-                    <div className="item-info">
-                      <span className="item-name">{label}</span>
-                      <span className="item-detail">
-                        {detail}
-                        {isMile && (
-                          <span className="mileage-cumulative-note">
-                            {' '}
-                            <Tip text="Calculated across your cumulative miles this tax year." />
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    {isIncome ? (
-                      <span className="business-amount business-amount--income">+{gbp(entry.amount)}</span>
-                    ) : isMile ? (
-                      <span className="business-amount business-amount--expense">−{gbp(mileAttr)}</span>
-                    ) : isFlatHO ? null : (
-                      <span className="business-amount business-amount--expense">−{gbp(entry.amount)}</span>
-                    )}
-                    <div className="item-actions">
-                      <button className="btn-sm" onClick={() => startEdit(entry._type, entry)}>Edit</button>
-                      <button className="btn-sm btn-danger" onClick={() => handleDelete(entry._type, entry.id)}>Delete</button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+        {tab === 'cashflow' && (
+          <>
+            {allActivity.length > 0 ? (
+              <div className="card">
+                <ul className="item-list">
+                  {activityList(allActivity)}
+                </ul>
+              </div>
+            ) : (
+              <p className="list-empty">No transactions yet. Add income or expenses to see them here.</p>
+            )}
+          </>
         )}
-
-        {disclaimer}
       </main>
 
       {modal === 'income' && (
