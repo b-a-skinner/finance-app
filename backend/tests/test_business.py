@@ -649,6 +649,37 @@ class TestMileageAttribution:
         assert attr[str(moto_id)] == pytest.approx(5000 * 0.24)
         assert body["mileage_crossover_msg"] is not None  # 1,000 remaining message
 
+    def test_motorcycle_1000_miles_per_entry(self, client, db):
+        """Motorcycle 1,000 miles → attributed = 1000 × rate from config (not £0)."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": d}, headers=h)
+
+        moto_id = _post_mileage(client, h, d, 1000, "motorcycle")
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        attr = body["mileage_attribution"]
+
+        assert attr[str(moto_id)] == pytest.approx(1000 * 0.24)  # £240, never £0
+        assert body["total_mileage_allowance"] == pytest.approx(240.0)
+        assert body["mileage_crossover_msg"] is None  # no tiered vehicle
+
+    def test_bicycle_per_entry_attribution(self, client, db):
+        """Bicycle: attributed = miles × bicycle rate from config, no threshold logic."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": d}, headers=h)
+
+        bike_id = _post_mileage(client, h, d, 350, "bicycle")
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        attr = body["mileage_attribution"]
+
+        assert attr[str(bike_id)] == pytest.approx(350 * 0.20)  # £70
+        assert body["total_mileage_allowance"] == pytest.approx(70.0)
+
     def test_deterministic_ordering_same_day(self, client, db):
         """Same-day entries are stable across repeated calls (sorted by id as tiebreaker)."""
         seed_biz_config(db)
