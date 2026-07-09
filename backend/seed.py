@@ -5,6 +5,7 @@ Run once after `alembic upgrade head`:
 """
 from app.database import SessionLocal
 from app.models import AgeBenchmarkPension, AgeBenchmarkSalary, RegionalSalaryBenchmark, StudentLoanPlanConfig, TaxYearConfig
+from app.models.config import BusinessTaxConfig
 
 
 def seed() -> None:
@@ -69,6 +70,24 @@ def seed() -> None:
             ])
             db.commit()
             print("Seeded age benchmark tables.")
+
+        if not db.query(BusinessTaxConfig).filter_by(tax_year="2026/27").first():
+            db.add(BusinessTaxConfig(
+                tax_year="2026/27",
+                # Home office flat rates — £/month (HMRC simplified expenses)
+                home_office_band_25_50=10.0,
+                home_office_band_51_100=18.0,
+                home_office_band_101_plus=26.0,
+                # Mileage rates — increased from 45p to 55p for 2026/27 (HMRC April 2026)
+                mileage_car_van_first=0.55,
+                mileage_car_van_over=0.25,
+                mileage_motorcycle=0.24,
+                mileage_bicycle=0.20,
+                mileage_threshold=10000,
+                source_note="HMRC simplified expenses, 2026/27. Mileage rate increased from 45p to 55p from 6 April 2026.",
+            ))
+            db.commit()
+            print("Seeded BusinessTaxConfig for 2026/27.")
 
         if not db.query(RegionalSalaryBenchmark).first():
             _R = "ONS ASHE, April 2025, released October 2025"

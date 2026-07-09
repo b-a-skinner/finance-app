@@ -1,14 +1,17 @@
-"""Tests for business income/expense CRUD, ownership isolation, and YTD summary."""
+"""Tests for business income/expense CRUD, ownership isolation, YTD summary, and HMRC simplified expenses."""
 from datetime import date, timedelta
 
 import pytest
 
+from app.models.config import BusinessTaxConfig
+
 REGISTER = "/api/auth/register"
 LOGIN = "/api/auth/login"
 
-INCOME_URL = "/api/business/income"
+INCOME_URL  = "/api/business/income"
 EXPENSE_URL = "/api/business/expenses"
 SUMMARY_URL = "/api/business/summary"
+TAX_CFG_URL = "/api/business/tax-config"
 
 TODAY = date.today().isoformat()
 
@@ -17,6 +20,26 @@ def auth(client, email="alice@test.com", password="testpass123!"):
     client.post(REGISTER, json={"email": email, "password": password})
     r = client.post(LOGIN, data={"username": email, "password": password})
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+def seed_biz_config(db):
+    """Seed a BusinessTaxConfig for the current tax year into the test DB."""
+    today = date.today()
+    year  = today.year if today >= date(today.year, 4, 6) else today.year - 1
+    label = f"{year}/{str(year + 1)[2:]}"
+    if not db.query(BusinessTaxConfig).filter_by(tax_year=label).first():
+        db.add(BusinessTaxConfig(
+            tax_year=label,
+            home_office_band_25_50=10.0,
+            home_office_band_51_100=18.0,
+            home_office_band_101_plus=26.0,
+            mileage_car_van_first=0.55,
+            mileage_car_van_over=0.25,
+            mileage_motorcycle=0.24,
+            mileage_bicycle=0.20,
+            mileage_threshold=10000,
+        ))
+        db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +82,7 @@ class TestBusinessIncomeCRUD:
 
     def test_isolation(self, client):
         alice = auth(client, "alice@test.com")
-        bob = auth(client, "bob@test.com")
+        bob   = auth(client, "bob@test.com")
         item_id = client.post(INCOME_URL, json=self.CREATE, headers=alice).json()["id"]
         assert client.patch(f"{INCOME_URL}/{item_id}", json=self.UPDATE, headers=bob).status_code == 404
         assert client.delete(f"{INCOME_URL}/{item_id}", headers=bob).status_code == 404
@@ -74,7 +97,7 @@ class TestBusinessIncomeCRUD:
 
 
 # ---------------------------------------------------------------------------
-# Expense CRUD + allowability
+# Expense CRUD + allowability + new fields
 # ---------------------------------------------------------------------------
 
 class TestBusinessExpenseCRUD:
@@ -88,6 +111,8 @@ class TestBusinessExpenseCRUD:
         body = r.json()
         assert body["amount"] == 299.0
         assert body["category"] == "software"
+        assert body["business_use_percent"] == 100
+        assert body["expense_method"] is None
 
     def test_create_includes_is_allowable(self, client):
         h = auth(client)
@@ -103,7 +128,6 @@ class TestBusinessExpenseCRUD:
         assert r.json()["is_allowable"] is False
 
     def test_default_is_allowable_true(self, client):
-        """is_allowable defaults to True when omitted."""
         h = auth(client)
         r = client.post(EXPENSE_URL, json=self.CREATE, headers=h)
         assert r.json()["is_allowable"] is True
@@ -138,7 +162,7 @@ class TestBusinessExpenseCRUD:
 
     def test_isolation(self, client):
         alice = auth(client, "alice@test.com")
-        bob = auth(client, "bob@test.com")
+        bob   = auth(client, "bob@test.com")
         item_id = client.post(EXPENSE_URL, json=self.CREATE, headers=alice).json()["id"]
         assert client.patch(f"{EXPENSE_URL}/{item_id}", json=self.UPDATE, headers=bob).status_code == 404
         assert client.delete(f"{EXPENSE_URL}/{item_id}", headers=bob).status_code == 404
@@ -150,6 +174,56 @@ class TestBusinessExpenseCRUD:
                     "political", "home_office"):
             r = client.post(EXPENSE_URL, json={"amount": 10.0, "date_incurred": TODAY, "category": cat}, headers=h)
             assert r.status_code == 201, f"Failed for category: {cat}"
+
+    def test_mileage_expense_stored(self, client):
+        h = auth(client)
+        payload = {
+            "amount": 0,
+            "date_incurred": TODAY,
+            "category": "travel",
+            "is_allowable": True,
+            "expense_method": "mileage",
+            "business_miles": 1200,
+            "vehicle_type": "car_van",
+        }
+        r = client.post(EXPENSE_URL, json=payload, headers=h)
+        assert r.status_code == 201
+        body = r.json()
+        assert body["expense_method"] == "mileage"
+        assert body["business_miles"] == 1200
+        assert body["vehicle_type"] == "car_van"
+
+    def test_home_office_flat_stored(self, client):
+        h = auth(client)
+        payload = {
+            "amount": 0,
+            "date_incurred": TODAY,
+            "category": "home_office",
+            "is_allowable": True,
+            "expense_method": "home_office_flat",
+            "home_office_hours_band": "101_plus",
+        }
+        r = client.post(EXPENSE_URL, json=payload, headers=h)
+        assert r.status_code == 201
+        body = r.json()
+        assert body["expense_method"] == "home_office_flat"
+        assert body["home_office_hours_band"] == "101_plus"
+
+    def test_percentage_expense_stored(self, client):
+        h = auth(client)
+        payload = {
+            "amount": 100.0,
+            "date_incurred": TODAY,
+            "category": "phone_internet",
+            "is_allowable": True,
+            "expense_method": "percentage",
+            "business_use_percent": 70,
+        }
+        r = client.post(EXPENSE_URL, json=payload, headers=h)
+        assert r.status_code == 201
+        body = r.json()
+        assert body["business_use_percent"] == 70
+        assert body["expense_method"] == "percentage"
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +247,9 @@ class TestBusinessSummary:
         assert body["cash_profit"] == 0.0
         assert body["taxable_profit"] == 0.0
         assert body["has_business_data"] is False
+        assert body["total_business_miles"] == 0
+        assert body["total_mileage_allowance"] == 0.0
+        assert body["mileage_crossover_msg"] is None
 
     def test_has_data_flag(self, client):
         h = auth(client)
@@ -187,70 +264,256 @@ class TestBusinessSummary:
         before = (tax_start - timedelta(days=1)).isoformat()
 
         client.post(INCOME_URL, json={"amount": 1000.0, "date_received": within}, headers=h)
-        client.post(INCOME_URL, json={"amount": 500.0, "date_received": before}, headers=h)
+        client.post(INCOME_URL, json={"amount": 500.0,  "date_received": before}, headers=h)
         client.post(EXPENSE_URL, json={"amount": 200.0, "date_incurred": within, "category": "software", "is_allowable": True}, headers=h)
         client.post(EXPENSE_URL, json={"amount": 100.0, "date_incurred": before, "category": "travel"}, headers=h)
 
         body = client.get(SUMMARY_URL, headers=h).json()
-        assert body["revenue_ytd"] == pytest.approx(1000.0)
+        assert body["revenue_ytd"]        == pytest.approx(1000.0)
         assert body["total_expenses_ytd"] == pytest.approx(200.0)
-        assert body["cash_profit"] == pytest.approx(800.0)
-        assert body["has_business_data"] is True
+        assert body["cash_profit"]        == pytest.approx(800.0)
+        assert body["has_business_data"]  is True
 
     def test_allowable_vs_non_allowable_split(self, client):
         h = auth(client)
-        tax_start = _this_year_april_6()
-        d = tax_start.isoformat()
+        d = _this_year_april_6().isoformat()
 
         client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
-        # Allowable: 300 + 500 = 800
-        client.post(EXPENSE_URL, json={"amount": 300.0, "date_incurred": d, "category": "software", "is_allowable": True}, headers=h)
-        client.post(EXPENSE_URL, json={"amount": 500.0, "date_incurred": d, "category": "equipment", "is_allowable": True}, headers=h)
-        # Non-allowable: 200
-        client.post(EXPENSE_URL, json={"amount": 200.0, "date_incurred": d, "category": "client_entertainment", "is_allowable": False}, headers=h)
+        client.post(EXPENSE_URL, json={"amount": 300.0, "date_incurred": d, "category": "software",              "is_allowable": True},  headers=h)
+        client.post(EXPENSE_URL, json={"amount": 500.0, "date_incurred": d, "category": "equipment",             "is_allowable": True},  headers=h)
+        client.post(EXPENSE_URL, json={"amount": 200.0, "date_incurred": d, "category": "client_entertainment",  "is_allowable": False}, headers=h)
 
         body = client.get(SUMMARY_URL, headers=h).json()
-        assert body["total_expenses_ytd"] == pytest.approx(1000.0)
-        assert body["allowable_expenses_ytd"] == pytest.approx(800.0)
-        assert body["cash_profit"] == pytest.approx(4000.0)      # 5000 - 1000
-        assert body["taxable_profit"] == pytest.approx(4200.0)   # 5000 - 800
+        assert body["total_expenses_ytd"]      == pytest.approx(1000.0)
+        assert body["allowable_expenses_ytd"]  == pytest.approx(800.0)
+        assert body["cash_profit"]             == pytest.approx(4000.0)
+        assert body["taxable_profit"]          == pytest.approx(4200.0)
 
     def test_non_allowable_categories_default_flag(self, client):
-        """Client entertainment, fines, personal, political default is_allowable=False
-        only because the frontend sets it — the API stores whatever is sent.
-        Test that explicitly sending False is respected."""
         h = auth(client)
-        tax_start = _this_year_april_6()
-        d = tax_start.isoformat()
+        d = _this_year_april_6().isoformat()
         client.post(INCOME_URL, json={"amount": 1000.0, "date_received": d}, headers=h)
         for cat in ("client_entertainment", "fines", "personal", "political"):
             client.post(EXPENSE_URL, json={"amount": 100.0, "date_incurred": d, "category": cat, "is_allowable": False}, headers=h)
 
         body = client.get(SUMMARY_URL, headers=h).json()
-        assert body["total_expenses_ytd"] == pytest.approx(400.0)
+        assert body["total_expenses_ytd"]     == pytest.approx(400.0)
         assert body["allowable_expenses_ytd"] == pytest.approx(0.0)
-        assert body["taxable_profit"] == pytest.approx(1000.0)   # no allowable deductions
+        assert body["taxable_profit"]         == pytest.approx(1000.0)
 
     def test_april_5_falls_in_previous_tax_year(self, client):
-        """5 April is the last day of the PREVIOUS tax year — must not appear in YTD."""
         h = auth(client)
         tax_start = _this_year_april_6()
-        april_5_this_year = date(tax_start.year, 4, 5)
-        client.post(INCOME_URL, json={"amount": 999.0, "date_received": april_5_this_year.isoformat()}, headers=h)
-        body = client.get(SUMMARY_URL, headers=h).json()
-        assert body["revenue_ytd"] == pytest.approx(0.0)
+        april_5 = date(tax_start.year, 4, 5)
+        client.post(INCOME_URL, json={"amount": 999.0, "date_received": april_5.isoformat()}, headers=h)
+        assert client.get(SUMMARY_URL, headers=h).json()["revenue_ytd"] == pytest.approx(0.0)
 
     def test_april_6_falls_in_current_tax_year(self, client):
-        """6 April is the FIRST day of the current tax year — must appear in YTD."""
         h = auth(client)
         tax_start = _this_year_april_6()
         client.post(INCOME_URL, json={"amount": 999.0, "date_received": tax_start.isoformat()}, headers=h)
-        body = client.get(SUMMARY_URL, headers=h).json()
-        assert body["revenue_ytd"] == pytest.approx(999.0)
+        assert client.get(SUMMARY_URL, headers=h).json()["revenue_ytd"] == pytest.approx(999.0)
 
     def test_summary_isolation(self, client):
         alice = auth(client, "alice@test.com")
-        bob = auth(client, "bob@test.com")
+        bob   = auth(client, "bob@test.com")
         client.post(INCOME_URL, json={"amount": 5000.0, "date_received": TODAY}, headers=alice)
-        body = client.get(SUMMARY_URL, headers=bob).json()
-        assert body["revenue_ytd"] == 0.0
+        assert client.get(SUMMARY_URL, headers=bob).json()["revenue_ytd"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Mileage allowance (needs seeded config)
+# ---------------------------------------------------------------------------
+
+class TestMileageAllowance:
+    def test_car_van_below_threshold(self, client, db):
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 10000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "travel",
+            "is_allowable": True, "expense_method": "mileage",
+            "business_miles": 1000, "vehicle_type": "car_van",
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_business_miles"]    == 1000
+        assert body["total_mileage_allowance"] == pytest.approx(550.0)   # 1000 × 0.55
+        assert body["allowable_expenses_ytd"]  == pytest.approx(550.0)
+        assert body["total_expenses_ytd"]      == pytest.approx(0.0)     # no cash outlay
+        assert body["cash_profit"]             == pytest.approx(10000.0)
+        assert body["taxable_profit"]          == pytest.approx(9450.0)  # 10000 - 550
+        assert "9,000" in body["mileage_crossover_msg"]                  # 9,000 remaining
+
+    def test_car_van_crosses_threshold(self, client, db):
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 10000.0, "date_received": d}, headers=h)
+        # 8,000 + 4,000 = 12,000 miles total
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "travel",
+            "is_allowable": True, "expense_method": "mileage",
+            "business_miles": 8000, "vehicle_type": "car_van",
+        }, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "travel",
+            "is_allowable": True, "expense_method": "mileage",
+            "business_miles": 4000, "vehicle_type": "car_van",
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        # 10000 × 0.55 + 2000 × 0.25 = 5500 + 500 = 6000
+        assert body["total_business_miles"]    == 12000
+        assert body["total_mileage_allowance"] == pytest.approx(6000.0)
+        assert "2,000" in body["mileage_crossover_msg"]  # 2,000 miles over threshold
+
+    def test_motorcycle_flat_rate(self, client, db):
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "travel",
+            "is_allowable": True, "expense_method": "mileage",
+            "business_miles": 500, "vehicle_type": "motorcycle",
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_mileage_allowance"] == pytest.approx(120.0)  # 500 × 0.24
+        assert body["mileage_crossover_msg"] is None  # no car/van miles
+
+    def test_bicycle_flat_rate(self, client, db):
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "travel",
+            "is_allowable": True, "expense_method": "mileage",
+            "business_miles": 200, "vehicle_type": "bicycle",
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_mileage_allowance"] == pytest.approx(40.0)   # 200 × 0.20
+
+    def test_mileage_excluded_from_cash_expenses(self, client, db):
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
+        # Cash expense
+        client.post(EXPENSE_URL, json={"amount": 200.0, "date_incurred": d, "category": "software", "is_allowable": True}, headers=h)
+        # Mileage (no cash)
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "travel",
+            "is_allowable": True, "expense_method": "mileage",
+            "business_miles": 100, "vehicle_type": "car_van",
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_expenses_ytd"]     == pytest.approx(200.0)   # mileage not in cash
+        assert body["cash_profit"]            == pytest.approx(4800.0)  # 5000 - 200
+        assert body["allowable_expenses_ytd"] == pytest.approx(200.0 + 55.0)  # 100 × 0.55
+
+
+# ---------------------------------------------------------------------------
+# Home office flat rate (needs seeded config)
+# ---------------------------------------------------------------------------
+
+class TestHomeOfficeFlatRate:
+    def test_single_month_101_plus_band(self, client, db):
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "home_office",
+            "is_allowable": True, "expense_method": "home_office_flat",
+            "home_office_hours_band": "101_plus",
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["allowable_expenses_ytd"] == pytest.approx(26.0)
+        assert body["total_expenses_ytd"]     == pytest.approx(0.0)  # no cash outlay
+        assert body["cash_profit"]            == pytest.approx(5000.0)
+        assert body["taxable_profit"]         == pytest.approx(4974.0)
+
+    def test_multiple_months_different_bands(self, client, db):
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
+        # 2 × £26 + 1 × £18 + 1 × £10 = £80
+        for band, n in [("101_plus", 2), ("51_100", 1), ("25_50", 1)]:
+            for _ in range(n):
+                client.post(EXPENSE_URL, json={
+                    "amount": 0, "date_incurred": d, "category": "home_office",
+                    "is_allowable": True, "expense_method": "home_office_flat",
+                    "home_office_hours_band": band,
+                }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["allowable_expenses_ytd"] == pytest.approx(80.0)
+
+
+# ---------------------------------------------------------------------------
+# Percentage (partial business use)
+# ---------------------------------------------------------------------------
+
+class TestPercentageExpenses:
+    def test_70pct_business_use(self, client):
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 100.0, "date_incurred": d, "category": "phone_internet",
+            "is_allowable": True, "expense_method": "percentage",
+            "business_use_percent": 70,
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_expenses_ytd"]     == pytest.approx(100.0)
+        assert body["allowable_expenses_ytd"] == pytest.approx(70.0)
+        assert body["cash_profit"]            == pytest.approx(900.0)
+        assert body["taxable_profit"]         == pytest.approx(930.0)
+
+    def test_home_office_actual(self, client):
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 2000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 500.0, "date_incurred": d, "category": "home_office",
+            "is_allowable": True, "expense_method": "home_office_actual",
+            "business_use_percent": 40,
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_expenses_ytd"]     == pytest.approx(500.0)
+        assert body["allowable_expenses_ytd"] == pytest.approx(200.0)   # 500 × 40%
+
+
+# ---------------------------------------------------------------------------
+# Tax config endpoint
+# ---------------------------------------------------------------------------
+
+class TestTaxConfigEndpoint:
+    def test_returns_404_without_seed(self, client):
+        h = auth(client)
+        r = client.get(TAX_CFG_URL, headers=h)
+        assert r.status_code == 404
+
+    def test_returns_config_when_seeded(self, client, db):
+        seed_biz_config(db)
+        h = auth(client)
+        r = client.get(TAX_CFG_URL, headers=h)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["mileage_car_van_first"] == pytest.approx(0.55)
+        assert body["mileage_threshold"]     == 10000
+        assert body["home_office_band_101_plus"] == pytest.approx(26.0)
+
+    def test_requires_auth(self, client):
+        r = client.get(TAX_CFG_URL)
+        assert r.status_code == 401

@@ -180,4 +180,11 @@ class BusinessExpense(TimestampMixin, Base):
     is_allowable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Dual-purpose / HMRC simplified expenses fields
+    business_use_percent: Mapped[int] = mapped_column(Integer, default=100, nullable=False, server_default='100')
+    expense_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)       # null|mileage|home_office_flat|home_office_actual|percentage
+    home_office_hours_band: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # 25_50|51_100|101_plus
+    business_miles: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    vehicle_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)          # car_van|motorcycle|bicycle
+
     user: Mapped["User"] = relationship(back_populates="business_expenses")

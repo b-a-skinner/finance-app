@@ -349,6 +349,11 @@ class BusinessExpenseCreate(BaseModel):
     category: str
     description: str | None = None
     is_allowable: bool = True
+    business_use_percent: int = 100
+    expense_method: str | None = None
+    home_office_hours_band: str | None = None
+    business_miles: int | None = None
+    vehicle_type: str | None = None
 
 
 class BusinessExpenseUpdate(BaseModel):
@@ -357,6 +362,11 @@ class BusinessExpenseUpdate(BaseModel):
     category: str | None = None
     description: str | None = None
     is_allowable: bool | None = None
+    business_use_percent: int | None = None
+    expense_method: str | None = None
+    home_office_hours_band: str | None = None
+    business_miles: int | None = None
+    vehicle_type: str | None = None
 
 
 class BusinessExpenseOut(BaseModel):
@@ -367,6 +377,23 @@ class BusinessExpenseOut(BaseModel):
     category: str
     description: str | None
     is_allowable: bool
+    business_use_percent: int
+    expense_method: str | None
+    home_office_hours_band: str | None
+    business_miles: int | None
+    vehicle_type: str | None
+
+
+class BusinessTaxConfigOut(BaseModel):
+    tax_year: str
+    home_office_band_25_50: float
+    home_office_band_51_100: float
+    home_office_band_101_plus: float
+    mileage_car_van_first: float
+    mileage_car_van_over: float
+    mileage_motorcycle: float
+    mileage_bicycle: float
+    mileage_threshold: int
 
 
 class BusinessSummaryOut(BaseModel):
@@ -376,3 +403,6 @@ class BusinessSummaryOut(BaseModel):
     cash_profit: float
     taxable_profit: float
     has_business_data: bool
+    total_business_miles: int
+    total_mileage_allowance: float
+    mileage_crossover_msg: str | None

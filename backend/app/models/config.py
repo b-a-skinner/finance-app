@@ -6,6 +6,29 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
 
+class BusinessTaxConfig(Base):
+    """HMRC mileage and simplified expenses rates by tax year."""
+
+    __tablename__ = "business_tax_configs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tax_year: Mapped[str] = mapped_column(String(10), unique=True, nullable=False)
+
+    # Home office flat rates — £/month (HMRC simplified expenses)
+    home_office_band_25_50: Mapped[float] = mapped_column(Float, nullable=False)    # 25–50 h/month
+    home_office_band_51_100: Mapped[float] = mapped_column(Float, nullable=False)   # 51–100 h/month
+    home_office_band_101_plus: Mapped[float] = mapped_column(Float, nullable=False) # 101+ h/month
+
+    # Mileage rates — £/mile
+    mileage_car_van_first: Mapped[float] = mapped_column(Float, nullable=False)   # first N miles
+    mileage_car_van_over: Mapped[float] = mapped_column(Float, nullable=False)    # above threshold
+    mileage_motorcycle: Mapped[float] = mapped_column(Float, nullable=False)
+    mileage_bicycle: Mapped[float] = mapped_column(Float, nullable=False)
+    mileage_threshold: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    source_note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+
 class TaxYearConfig(Base):
     """UK tax parameters for a given tax year. Seed with real HMRC figures."""
 
