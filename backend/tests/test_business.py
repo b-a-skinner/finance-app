@@ -9,10 +9,11 @@ from app.models.config import BusinessTaxConfig, TaxYearConfig
 REGISTER = "/api/auth/register"
 LOGIN = "/api/auth/login"
 
-INCOME_URL  = "/api/business/income"
-EXPENSE_URL = "/api/business/expenses"
-SUMMARY_URL = "/api/business/summary"
-TAX_CFG_URL = "/api/business/tax-config"
+INCOME_URL   = "/api/business/income"
+EXPENSE_URL  = "/api/business/expenses"
+SUMMARY_URL  = "/api/business/summary"
+TAX_CFG_URL  = "/api/business/tax-config"
+UPCOMING_URL = "/api/business/upcoming"
 
 TODAY = date.today().isoformat()
 
@@ -926,3 +927,198 @@ class TestPresentationConsistency:
 
         body = client.get(SUMMARY_URL, headers=h).json()
         assert body["cash_profit"] == pytest.approx(body["revenue_ytd"] - body["total_expenses_ytd"])
+
+
+# ---------------------------------------------------------------------------
+# Upcoming — scheduled, awaiting approval, approve, dismiss lifecycle
+# ---------------------------------------------------------------------------
+
+FUTURE = (date.today() + timedelta(days=7)).isoformat()
+PAST   = (date.today() - timedelta(days=7)).isoformat()
+
+
+class TestUpcomingAndApproval:
+    def test_future_income_excluded_from_summary(self, client):
+        h = auth(client)
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": FUTURE}, headers=h)
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["revenue_ytd"] == pytest.approx(0.0)
+
+    def test_future_expense_excluded_from_summary(self, client):
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={"amount": 500.0, "date_incurred": FUTURE, "category": "software"}, headers=h)
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_expenses_ytd"] == pytest.approx(0.0)
+        assert body["revenue_ytd"] == pytest.approx(5000.0)
+
+    def test_future_income_appears_in_upcoming(self, client):
+        h = auth(client)
+        r = client.post(INCOME_URL, json={"amount": 750.0, "date_received": FUTURE, "description": "Future invoice"}, headers=h)
+        item_id = r.json()["id"]
+        assert r.json()["is_approved"] is False
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        ids = [i["id"] for i in upcoming["income"]]
+        assert item_id in ids
+
+    def test_future_expense_appears_in_upcoming(self, client):
+        h = auth(client)
+        r = client.post(EXPENSE_URL, json={"amount": 200.0, "date_incurred": FUTURE, "category": "software"}, headers=h)
+        item_id = r.json()["id"]
+        assert r.json()["is_approved"] is False
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        ids = [i["id"] for i in upcoming["expenses"]]
+        assert item_id in ids
+
+    def test_future_income_not_in_transactions_list(self, client):
+        h = auth(client)
+        item_id = client.post(INCOME_URL, json={"amount": 750.0, "date_received": FUTURE}, headers=h).json()["id"]
+        confirmed_ids = [i["id"] for i in client.get(INCOME_URL, headers=h).json()]
+        assert item_id not in confirmed_ids
+
+    def test_awaiting_approval_excluded_from_summary(self, client, db):
+        """Past-dated entry with is_approved forced False → excluded until approved."""
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        item_id = client.post(INCOME_URL, json={"amount": 500.0, "date_received": d}, headers=h).json()["id"]
+        # Force back to unapproved to simulate awaiting-approval state
+        from app.models.finance import BusinessIncome
+        entry = db.query(BusinessIncome).filter_by(id=item_id).first()
+        entry.is_approved = False
+        db.commit()
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["revenue_ytd"] == pytest.approx(0.0)
+
+    def test_awaiting_approval_appears_in_upcoming(self, client, db):
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        item_id = client.post(INCOME_URL, json={"amount": 500.0, "date_received": d}, headers=h).json()["id"]
+        from app.models.finance import BusinessIncome
+        entry = db.query(BusinessIncome).filter_by(id=item_id).first()
+        entry.is_approved = False
+        db.commit()
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        ids = [i["id"] for i in upcoming["income"]]
+        assert item_id in ids
+
+    def test_approve_income_counts_in_summary(self, client):
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        item_id = client.post(INCOME_URL, json={"amount": 1200.0, "date_received": FUTURE}, headers=h).json()["id"]
+        # Approve with today's date (within current tax year)
+        r = client.post(f"{INCOME_URL}/{item_id}/approve", json={"date_received": d}, headers=h)
+        assert r.status_code == 200
+        assert r.json()["is_approved"] is True
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["revenue_ytd"] == pytest.approx(1200.0)
+
+    def test_approve_income_with_edited_amount(self, client):
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        item_id = client.post(INCOME_URL, json={"amount": 1000.0, "date_received": FUTURE}, headers=h).json()["id"]
+        r = client.post(f"{INCOME_URL}/{item_id}/approve", json={"amount": 1500.0, "date_received": d}, headers=h)
+        assert r.status_code == 200
+        assert r.json()["amount"] == pytest.approx(1500.0)
+        assert r.json()["is_approved"] is True
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["revenue_ytd"] == pytest.approx(1500.0)
+
+    def test_approve_with_still_future_date_stays_scheduled(self, client):
+        h = auth(client)
+        item_id = client.post(INCOME_URL, json={"amount": 800.0, "date_received": FUTURE}, headers=h).json()["id"]
+        later = (date.today() + timedelta(days=14)).isoformat()
+        r = client.post(f"{INCOME_URL}/{item_id}/approve", json={"date_received": later}, headers=h)
+        assert r.status_code == 200
+        assert r.json()["is_approved"] is False  # date still future → not confirmed
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        ids = [i["id"] for i in upcoming["income"]]
+        assert item_id in ids
+
+    def test_approve_expense_counts_in_summary(self, client):
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
+        item_id = client.post(EXPENSE_URL, json={"amount": 300.0, "date_incurred": FUTURE, "category": "software"}, headers=h).json()["id"]
+        r = client.post(f"{EXPENSE_URL}/{item_id}/approve", json={"date_incurred": d}, headers=h)
+        assert r.status_code == 200
+        assert r.json()["is_approved"] is True
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_expenses_ytd"] == pytest.approx(300.0)
+
+    def test_dismiss_income_not_in_upcoming_or_summary(self, client):
+        h = auth(client)
+        item_id = client.post(INCOME_URL, json={"amount": 500.0, "date_received": FUTURE}, headers=h).json()["id"]
+        r = client.delete(f"{INCOME_URL}/{item_id}", headers=h)
+        assert r.status_code == 204
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        ids = [i["id"] for i in upcoming["income"]]
+        assert item_id not in ids
+        assert client.get(SUMMARY_URL, headers=h).json()["revenue_ytd"] == pytest.approx(0.0)
+
+    def test_dismiss_expense_not_in_upcoming_or_summary(self, client):
+        h = auth(client)
+        item_id = client.post(EXPENSE_URL, json={"amount": 200.0, "date_incurred": FUTURE, "category": "software"}, headers=h).json()["id"]
+        client.delete(f"{EXPENSE_URL}/{item_id}", headers=h)
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        assert item_id not in [i["id"] for i in upcoming["expenses"]]
+
+    def test_mixed_entries_only_confirmed_in_summary(self, client):
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        # Confirmed income (past date)
+        client.post(INCOME_URL, json={"amount": 2000.0, "date_received": d}, headers=h)
+        # Scheduled income (future)
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": FUTURE}, headers=h)
+        # Confirmed expense
+        client.post(EXPENSE_URL, json={"amount": 400.0, "date_incurred": d, "category": "software"}, headers=h)
+        # Scheduled expense
+        client.post(EXPENSE_URL, json={"amount": 300.0, "date_incurred": FUTURE, "category": "equipment"}, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["revenue_ytd"]        == pytest.approx(2000.0)
+        assert body["total_expenses_ytd"] == pytest.approx(400.0)
+
+    def test_update_date_to_future_unschedules_confirmed(self, client):
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        item_id = client.post(INCOME_URL, json={"amount": 500.0, "date_received": d}, headers=h).json()["id"]
+        # Entry is confirmed; patch date to future
+        client.patch(f"{INCOME_URL}/{item_id}", json={"date_received": FUTURE}, headers=h)
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        assert item_id in [i["id"] for i in upcoming["income"]]
+        assert client.get(SUMMARY_URL, headers=h).json()["revenue_ytd"] == pytest.approx(0.0)
+
+    def test_upcoming_isolation(self, client):
+        alice = auth(client, "alice@test.com")
+        bob   = auth(client, "bob@test.com")
+        client.post(INCOME_URL, json={"amount": 999.0, "date_received": FUTURE}, headers=alice)
+
+        bob_upcoming = client.get(UPCOMING_URL, headers=bob).json()
+        assert bob_upcoming["income"] == []
+        assert bob_upcoming["expenses"] == []
+
+    def test_has_business_data_true_with_only_scheduled(self, client):
+        """Dashboard shows even when all entries are still scheduled."""
+        h = auth(client)
+        client.post(INCOME_URL, json={"amount": 500.0, "date_received": FUTURE}, headers=h)
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["has_business_data"] is True
+
+    def test_approve_endpoint_ownership(self, client):
+        alice = auth(client, "alice@test.com")
+        bob   = auth(client, "bob@test.com")
+        item_id = client.post(INCOME_URL, json={"amount": 500.0, "date_received": FUTURE}, headers=alice).json()["id"]
+        r = client.post(f"{INCOME_URL}/{item_id}/approve", json={}, headers=bob)
+        assert r.status_code == 404

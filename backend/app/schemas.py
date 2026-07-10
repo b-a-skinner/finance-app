@@ -341,6 +341,7 @@ class BusinessIncomeOut(BaseModel):
     amount: float
     date_received: date
     description: str | None
+    is_approved: bool
 
 
 class BusinessExpenseCreate(BaseModel):
@@ -382,6 +383,22 @@ class BusinessExpenseOut(BaseModel):
     home_office_hours_band: str | None
     business_miles: int | None
     vehicle_type: str | None
+    is_approved: bool
+
+
+class ApproveIncomeBody(BaseModel):
+    amount: float | None = None
+    date_received: date | None = None
+
+
+class ApproveExpenseBody(BaseModel):
+    amount: float | None = None
+    date_incurred: date | None = None
+
+
+class BusinessUpcomingOut(BaseModel):
+    income: list[BusinessIncomeOut]
+    expenses: list[BusinessExpenseOut]
 
 
 class BusinessTaxConfigOut(BaseModel):

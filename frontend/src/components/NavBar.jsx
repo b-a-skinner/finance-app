@@ -16,6 +16,7 @@ const PERSONAL_LINKS = [
 const BUSINESS_LINKS = [
   { to: '/business',     label: 'Dashboard' },
   { to: '/transactions', label: 'Transactions' },
+  { to: '/upcoming',     label: 'Upcoming' },
   { to: '/profile',      label: 'Profile' },
 ];
 

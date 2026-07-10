@@ -10,6 +10,8 @@ from app.services.tax_calculator import calculate_sole_trader_tax
 from app.models.user import User
 from app.routes.auth import get_current_user
 from app.schemas import (
+    ApproveExpenseBody,
+    ApproveIncomeBody,
     BusinessExpenseCreate,
     BusinessExpenseOut,
     BusinessExpenseUpdate,
@@ -18,6 +20,7 @@ from app.schemas import (
     BusinessIncomeUpdate,
     BusinessSummaryOut,
     BusinessTaxConfigOut,
+    BusinessUpcomingOut,
     SoleTraderTaxOut,
 )
 from app.utils import get_owned_or_404
@@ -153,7 +156,11 @@ def list_income(
 ):
     return (
         db.query(BusinessIncome)
-        .filter_by(user_id=current_user.id, is_active=True)
+        .filter(
+            BusinessIncome.user_id == current_user.id,
+            BusinessIncome.is_active == True,
+            BusinessIncome.is_approved == True,
+        )
         .order_by(BusinessIncome.date_received.desc())
         .all()
     )
@@ -165,7 +172,8 @@ def create_income(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    item = BusinessIncome(**body.model_dump(), user_id=current_user.id)
+    is_approved = body.date_received <= date.today()
+    item = BusinessIncome(**body.model_dump(), user_id=current_user.id, is_approved=is_approved)
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -180,8 +188,30 @@ def update_income(
     current_user: User = Depends(get_current_user),
 ):
     item = get_owned_or_404(db, BusinessIncome, item_id, current_user.id)
-    for field, value in body.model_dump(exclude_unset=True).items():
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
         setattr(item, field, value)
+    if 'date_received' in updates and item.date_received > date.today():
+        item.is_approved = False
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.post("/income/{item_id}/approve", response_model=BusinessIncomeOut)
+def approve_income(
+    item_id: int,
+    body: ApproveIncomeBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = get_owned_or_404(db, BusinessIncome, item_id, current_user.id)
+    if body.amount is not None:
+        item.amount = body.amount
+    if body.date_received is not None:
+        item.date_received = body.date_received
+    if item.date_received <= date.today():
+        item.is_approved = True
     db.commit()
     db.refresh(item)
     return item
@@ -209,7 +239,11 @@ def list_expenses(
 ):
     return (
         db.query(BusinessExpense)
-        .filter_by(user_id=current_user.id, is_active=True)
+        .filter(
+            BusinessExpense.user_id == current_user.id,
+            BusinessExpense.is_active == True,
+            BusinessExpense.is_approved == True,
+        )
         .order_by(BusinessExpense.date_incurred.desc())
         .all()
     )
@@ -221,7 +255,8 @@ def create_expense(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    item = BusinessExpense(**body.model_dump(), user_id=current_user.id)
+    is_approved = body.date_incurred <= date.today()
+    item = BusinessExpense(**body.model_dump(), user_id=current_user.id, is_approved=is_approved)
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -236,8 +271,30 @@ def update_expense(
     current_user: User = Depends(get_current_user),
 ):
     item = get_owned_or_404(db, BusinessExpense, item_id, current_user.id)
-    for field, value in body.model_dump(exclude_unset=True).items():
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
         setattr(item, field, value)
+    if 'date_incurred' in updates and item.date_incurred > date.today():
+        item.is_approved = False
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.post("/expenses/{item_id}/approve", response_model=BusinessExpenseOut)
+def approve_expense(
+    item_id: int,
+    body: ApproveExpenseBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = get_owned_or_404(db, BusinessExpense, item_id, current_user.id)
+    if body.amount is not None:
+        item.amount = body.amount
+    if body.date_incurred is not None:
+        item.date_incurred = body.date_incurred
+    if item.date_incurred <= date.today():
+        item.is_approved = True
     db.commit()
     db.refresh(item)
     return item
@@ -252,6 +309,38 @@ def delete_expense(
     item = get_owned_or_404(db, BusinessExpense, item_id, current_user.id)
     item.is_active = False
     db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Upcoming (scheduled + awaiting approval)
+# ---------------------------------------------------------------------------
+
+@router.get("/upcoming", response_model=BusinessUpcomingOut)
+def get_upcoming(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    income = (
+        db.query(BusinessIncome)
+        .filter(
+            BusinessIncome.user_id == current_user.id,
+            BusinessIncome.is_active == True,
+            BusinessIncome.is_approved == False,
+        )
+        .order_by(BusinessIncome.date_received.asc())
+        .all()
+    )
+    expenses = (
+        db.query(BusinessExpense)
+        .filter(
+            BusinessExpense.user_id == current_user.id,
+            BusinessExpense.is_active == True,
+            BusinessExpense.is_approved == False,
+        )
+        .order_by(BusinessExpense.date_incurred.asc())
+        .all()
+    )
+    return BusinessUpcomingOut(income=income, expenses=expenses)
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +377,7 @@ def get_business_summary(
         .filter(
             BusinessIncome.user_id == current_user.id,
             BusinessIncome.is_active == True,
+            BusinessIncome.is_approved == True,
             BusinessIncome.date_received >= start,
             BusinessIncome.date_received <= end,
         )
@@ -298,6 +388,7 @@ def get_business_summary(
         .filter(
             BusinessExpense.user_id == current_user.id,
             BusinessExpense.is_active == True,
+            BusinessExpense.is_approved == True,
             BusinessExpense.date_incurred >= start,
             BusinessExpense.date_incurred <= end,
         )

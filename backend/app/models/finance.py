@@ -164,6 +164,7 @@ class BusinessIncome(TimestampMixin, Base):
     date_received: Mapped[date] = mapped_column(Date, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_approved: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="business_income")
 
@@ -179,6 +180,7 @@ class BusinessExpense(TimestampMixin, Base):
     description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_allowable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_approved: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Dual-purpose / HMRC simplified expenses fields
     business_use_percent: Mapped[int] = mapped_column(Integer, default=100, nullable=False, server_default='100')

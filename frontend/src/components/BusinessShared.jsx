@@ -227,6 +227,9 @@ export function IncomeModal({ onClose, onSuccess, item }) {
         <div className="form-group">
           <label htmlFor="bi-date">Date received</label>
           <input id="bi-date" type="date" value={form.date_received} onChange={e => field('date_received', e.target.value)} />
+          {form.date_received > today() && (
+            <p className="scheduled-flag">Scheduled — this won't count towards your figures until its date passes and you approve it.</p>
+          )}
         </div>
         <div className="form-group">
           <label htmlFor="bi-desc">Description <span className="form-hint-inline">(optional)</span></label>
@@ -536,6 +539,9 @@ export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
         <div className="form-group">
           <label htmlFor="be-date">Date</label>
           <input id="be-date" type="date" value={form.date_incurred} onChange={e => field('date_incurred', e.target.value)} />
+          {form.date_incurred > today() && (
+            <p className="scheduled-flag">Scheduled — this won't count towards your figures until its date passes and you approve it.</p>
+          )}
         </div>
 
         <div className="form-group">

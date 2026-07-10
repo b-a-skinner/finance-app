@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Assets from './pages/Assets';
 import Business from './pages/Business';
 import Transactions from './pages/Transactions';
+import Upcoming from './pages/Upcoming';
 import ChooseMode from './pages/ChooseMode';
 import ChooseBusinessType from './pages/ChooseBusinessType';
 import Dashboard from './pages/Dashboard';
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="/pension" element={<P><Pension /></P>} />
           <Route path="/business" element={<P><Business /></P>} />
           <Route path="/transactions" element={<P><Transactions /></P>} />
+          <Route path="/upcoming" element={<P><Upcoming /></P>} />
           <Route path="/choose-mode" element={<P><ChooseMode /></P>} />
           <Route path="/choose-business-type" element={<P><ChooseBusinessType /></P>} />
           <Route path="/profile" element={<P><Profile /></P>} />
