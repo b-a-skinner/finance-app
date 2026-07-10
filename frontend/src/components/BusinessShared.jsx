@@ -60,8 +60,10 @@ export function vehicleRateNote(vehicleType, taxConfig) {
   const info = RATES[vehicleType];
   if (!info) return null;
   if ('rate' in info) {
+    if (info.rate == null) return null;
     return `${Math.round(info.rate * 100)}p per mile.`;
   }
+  if (info.first == null || info.over == null || info.threshold == null) return null;
   return `${Math.round(info.first * 100)}p per mile for the first ${info.threshold.toLocaleString('en-GB')} miles this tax year, then ${Math.round(info.over * 100)}p.`;
 }
 

@@ -394,6 +394,14 @@ class BusinessTaxConfigOut(BaseModel):
     mileage_motorcycle: float
     mileage_bicycle: float
     mileage_threshold: int
+    # Class 4 NI — nullable: rows seeded before these columns existed will return null
+    class4_lower_limit: float | None = None
+    class4_upper_limit: float | None = None
+    class4_main_rate: float | None = None
+    class4_upper_rate: float | None = None
+    # Class 2 NI
+    class2_small_profits_threshold: float | None = None
+    class2_weekly_rate: float | None = None
 
 
 class SoleTraderTaxOut(BaseModel):

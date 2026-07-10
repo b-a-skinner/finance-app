@@ -11,8 +11,12 @@ export function class2EducationSnippet(status, taxConfig) {
   const spt        = taxConfig.class2_small_profits_threshold;
   const lowerLimit = taxConfig.class4_lower_limit;
   const rate       = taxConfig.class2_weekly_rate;
-  const annualRate = Math.round(rate * 52);
 
+  // These fields were added to the API schema later; guard against null/undefined
+  // so an unseeded or older DB row silently shows nothing rather than crashing.
+  if (spt == null || lowerLimit == null || rate == null) return '';
+
+  const annualRate = Math.round(rate * 52);
   const fmtSpt   = spt.toLocaleString('en-GB');
   const fmtLimit = lowerLimit.toLocaleString('en-GB');
 
