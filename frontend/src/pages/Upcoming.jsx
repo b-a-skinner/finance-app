@@ -129,17 +129,19 @@ function ScheduledItem({ entry, apiFetch, onRefresh }) {
 
   return (
     <div className="scheduled-item">
-      <div className="scheduled-item-main">
-        <span className="scheduled-item-label">{entryLabel(entry)}</span>
-        <span className="scheduled-item-date">{formatDate(entry._date)}</span>
-        <span className="scheduled-item-amount">{entryAmount(entry)}</span>
+      <div className="scheduled-item-body">
+        <div className="scheduled-item-main">
+          <span className="scheduled-item-label">{entryLabel(entry)}</span>
+          <span className="scheduled-item-date">{formatDate(entry._date)}</span>
+          <span className="scheduled-item-amount">{entryAmount(entry)}</span>
+        </div>
+        {entry.recurrence_freq && (
+          <p className="recurrence-badge">
+            Recurring {RECURRENCE_LABELS[entry.recurrence_freq]}
+            {entry.recurrence_end_date ? `, until ${formatDate(entry.recurrence_end_date)}` : ''}
+          </p>
+        )}
       </div>
-      {entry.recurrence_freq && (
-        <p className="recurrence-badge">
-          Recurring {RECURRENCE_LABELS[entry.recurrence_freq]}
-          {entry.recurrence_end_date ? `, until ${formatDate(entry.recurrence_end_date)}` : ''}
-        </p>
-      )}
       <button className="scheduled-item-remove" onClick={handleRemove} disabled={removing} aria-label="Remove">
         ×
       </button>
