@@ -1320,40 +1320,25 @@ class TestRecurringItems:
 
     def test_approve_recurring_income_creates_confirmed_transaction(self, client):
         h = auth(client)
-        # Create a recurring entry due PAST (awaiting approval)
-        item = client.post(INCOME_URL, json={
-            "amount": 500.0, "date_received": PAST, "recurrence_freq": "monthly",
-        }, headers=h).json()
-        item_id = item["id"]
-        # Force is_approved=False so it shows in upcoming (past recurring is already approved on creation…
-        # use a future date entry for simplicity)
-        # Actually: PAST <= today so is_approved=True on creation. Use a workaround: create with future,
-        # then we need it to appear in upcoming. Use future date so it's in upcoming.
-        # For this test: create past date, force approval off via DB manipulation is complex without
-        # direct db access. Instead use a PAST entry: it's already approved. That's not what we want.
-        # Better: create with FUTURE, then use a past date at approve time.
-        item2 = client.post(INCOME_URL, json={
+        # Create with a future date so it lands in Upcoming (no backfill triggered).
+        item_id = client.post(INCOME_URL, json={
             "amount": 500.0, "date_received": FUTURE, "recurrence_freq": "monthly",
-        }, headers=h).json()
-        item2_id = item2["id"]
-        assert item2["is_approved"] is False
+        }, headers=h).json()["id"]
 
-        # Approve with a past date to trigger confirmation
-        r = client.post(f"{INCOME_URL}/{item2_id}/approve", json={"date_received": PAST}, headers=h)
+        # Approve with a past date to trigger confirmation.
+        r = client.post(f"{INCOME_URL}/{item_id}/approve", json={"date_received": PAST}, headers=h)
         assert r.status_code == 200
-        recurring = r.json()
 
-        # Confirmed transaction should now be in the income list (is_approved=True, non-recurring)
+        # Confirmed transaction should now be in the income list (is_approved=True, non-recurring).
         income_list = client.get(INCOME_URL, headers=h).json()
         confirmed = [i for i in income_list if i["amount"] == 500.0 and i["recurrence_freq"] is None]
         assert len(confirmed) == 1
         assert confirmed[0]["date_received"] == PAST
         assert confirmed[0]["is_approved"] is True
 
-        # Recurring entry should have rolled forward (still in upcoming)
+        # Recurring entry should have rolled forward (still in upcoming).
         upcoming = client.get(UPCOMING_URL, headers=h).json()
-        recurring_ids = [i["id"] for i in upcoming["income"]]
-        assert item2_id in recurring_ids
+        assert item_id in [i["id"] for i in upcoming["income"]]
 
     def test_approve_recurring_expense_creates_confirmed_transaction(self, client):
         h = auth(client)
@@ -1635,3 +1620,182 @@ class TestRecurringItems:
         income_list = client.get(INCOME_URL, headers=h).json()
         confirmed = [i for i in income_list if i["recurrence_freq"] is None and i["amount"] == pytest.approx(500.0)]
         assert len(confirmed) == 2
+
+
+# ---------------------------------------------------------------------------
+# Recurring back-fill: past-start recurrences auto-confirm past occurrences
+# ---------------------------------------------------------------------------
+
+class TestRecurringBackfill:
+    def test_past_start_monthly_backfills_one_confirmed_and_shows_next_in_upcoming(self, client):
+        """
+        Monthly recurrence started 5 days ago: exactly 1 past confirmed (start date),
+        and the next occurrence (~25 days from now) appears in Upcoming.
+        Using 5 days to ensure start + 1 month is always > today regardless of month length.
+        """
+        h = auth(client)
+        today = date.today()
+        start = today - timedelta(days=5)
+        r = client.post(INCOME_URL, json={
+            "amount": 500.0, "date_received": start.isoformat(), "recurrence_freq": "monthly",
+        }, headers=h)
+        assert r.status_code == 201
+
+        income_list = client.get(INCOME_URL, headers=h).json()
+        confirmed = [i for i in income_list if i["recurrence_freq"] is None]
+        assert len(confirmed) == 1
+        assert confirmed[0]["date_received"] == start.isoformat()
+        assert confirmed[0]["is_approved"] is True
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        rolling = [i for i in upcoming["income"] if i["recurrence_freq"] == "monthly"]
+        assert len(rolling) == 1
+        rolling_date = date.fromisoformat(rolling[0]["date_received"])
+        assert rolling_date > today
+
+    def test_two_weekly_started_35_days_ago_3_confirmed_1_upcoming(self, client):
+        """
+        Two-weekly started 35 days ago (5 weeks):
+        occurrences at +0/+14/+28 days are past (confirmed),
+        +42 days is 7 days in the future (rolling entry in Upcoming).
+        """
+        h = auth(client)
+        today = date.today()
+        start = today - timedelta(days=35)
+        r = client.post(INCOME_URL, json={
+            "amount": 300.0, "date_received": start.isoformat(), "recurrence_freq": "two_weekly",
+        }, headers=h)
+        assert r.status_code == 201
+
+        income_list = client.get(INCOME_URL, headers=h).json()
+        confirmed = [i for i in income_list if i["recurrence_freq"] is None]
+        assert len(confirmed) == 3
+
+        confirmed_dates = sorted(i["date_received"] for i in confirmed)
+        assert confirmed_dates[0] == start.isoformat()
+        assert confirmed_dates[1] == (start + timedelta(days=14)).isoformat()
+        assert confirmed_dates[2] == (start + timedelta(days=28)).isoformat()
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        rolling = [i for i in upcoming["income"] if i["recurrence_freq"] == "two_weekly"]
+        assert len(rolling) == 1
+        rolling_date = date.fromisoformat(rolling[0]["date_received"])
+        assert rolling_date == start + timedelta(days=42)
+        assert rolling_date > today
+
+    def test_all_occurrences_past_end_date_also_past_nothing_in_upcoming(self, client):
+        """Weekly started 14 days ago, ended 7 days ago: 2 confirmed, nothing in Upcoming."""
+        h = auth(client)
+        today     = date.today()
+        start     = today - timedelta(days=14)
+        end_date  = today - timedelta(days=7)
+        r = client.post(INCOME_URL, json={
+            "amount": 100.0, "date_received": start.isoformat(),
+            "recurrence_freq": "weekly", "recurrence_end_date": end_date.isoformat(),
+        }, headers=h)
+        assert r.status_code == 201
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        assert upcoming["income"] == []
+
+        income_list = client.get(INCOME_URL, headers=h).json()
+        confirmed = [i for i in income_list if i["recurrence_freq"] is None]
+        # start (today-14) and start+7 (= end_date = today-7): both ≤ today and ≤ end_date
+        assert len(confirmed) == 2
+        dates = sorted(i["date_received"] for i in confirmed)
+        assert dates[0] == start.isoformat()
+        assert dates[1] == end_date.isoformat()
+
+    def test_past_occurrences_respect_end_date(self, client):
+        """Back-filled occurrences beyond end_date are NOT created."""
+        h = auth(client)
+        from app.routes.business import _advance_date as _adv
+        today  = date.today()
+        start  = today - timedelta(days=35)   # 5 weeks ago
+        occ1   = _adv(start, "two_weekly")    # 3 weeks ago (still past)
+        occ2   = _adv(occ1,  "two_weekly")    # 1 week ago (still past)
+        occ3   = _adv(occ2,  "two_weekly")    # 1 week in the future
+        # End date is between occ2 and occ3, so occ3 should NOT be created
+        end_date = (occ3 - timedelta(days=3)).isoformat()
+        r = client.post(INCOME_URL, json={
+            "amount": 200.0, "date_received": start.isoformat(),
+            "recurrence_freq": "two_weekly", "recurrence_end_date": end_date,
+        }, headers=h)
+        assert r.status_code == 201
+
+        income_list = client.get(INCOME_URL, headers=h).json()
+        confirmed = [i for i in income_list if i["recurrence_freq"] is None]
+        # occ0, occ1, occ2 are ≤ end_date; occ3 is > end_date → exactly 3 confirmed
+        assert len(confirmed) == 3
+        for c in confirmed:
+            assert c["date_received"] <= end_date
+
+    def test_future_start_recurrence_unchanged(self, client):
+        """Future-start recurring: no backfill, single rolling entry in Upcoming."""
+        h = auth(client)
+        r = client.post(INCOME_URL, json={
+            "amount": 400.0, "date_received": FUTURE, "recurrence_freq": "monthly",
+        }, headers=h)
+        assert r.status_code == 201
+
+        # No confirmed transactions created
+        income_list = client.get(INCOME_URL, headers=h).json()
+        assert income_list == []
+
+        # Single rolling entry in Upcoming
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        rolling = [i for i in upcoming["income"] if i["recurrence_freq"] == "monthly"]
+        assert len(rolling) == 1
+        assert rolling[0]["date_received"] == FUTURE
+
+    def test_backfilled_past_occurrences_count_in_analytics(self, client):
+        """Back-filled confirmed transactions appear in summary YTD revenue."""
+        h = auth(client)
+        # Monthly started in this tax year: creates 1+ confirmed transactions
+        tax_start = _this_year_april_6()
+        # Use a date 35 days ago that is still within the tax year
+        start = date.today() - timedelta(days=35)
+        if start < tax_start:
+            start = tax_start  # fallback to tax year start if we've gone too far back
+        r = client.post(INCOME_URL, json={
+            "amount": 1000.0, "date_received": start.isoformat(), "recurrence_freq": "monthly",
+        }, headers=h)
+        assert r.status_code == 201
+
+        summary = client.get(SUMMARY_URL, headers=h).json()
+        # At least the first occurrence counts in revenue
+        assert summary["revenue_ytd"] >= 1000.0
+
+    def test_past_occurrences_not_in_approval_queue(self, client):
+        """Back-filled past transactions are confirmed directly — NOT in the approval queue."""
+        h = auth(client)
+        start = (date.today() - timedelta(days=35)).isoformat()
+        client.post(INCOME_URL, json={
+            "amount": 500.0, "date_received": start, "recurrence_freq": "two_weekly",
+        }, headers=h)
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        # The upcoming income list has only the future rolling entry — no past dates
+        for entry in upcoming["income"]:
+            assert date.fromisoformat(entry["date_received"]) > date.today()
+
+    def test_expense_backfill(self, client):
+        """Expense backfill: monthly started 5 days ago → 1 confirmed, next future in Upcoming."""
+        h = auth(client)
+        today = date.today()
+        start = today - timedelta(days=5)
+        r = client.post(EXPENSE_URL, json={
+            "amount": 150.0, "date_incurred": start.isoformat(), "category": "software",
+            "recurrence_freq": "monthly",
+        }, headers=h)
+        assert r.status_code == 201
+
+        expense_list = client.get(EXPENSE_URL, headers=h).json()
+        confirmed = [e for e in expense_list if e["recurrence_freq"] is None]
+        assert len(confirmed) == 1
+        assert confirmed[0]["date_incurred"] == start.isoformat()
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        rolling = [e for e in upcoming["expenses"] if e["recurrence_freq"] == "monthly"]
+        assert len(rolling) == 1
+        assert date.fromisoformat(rolling[0]["date_incurred"]) > today

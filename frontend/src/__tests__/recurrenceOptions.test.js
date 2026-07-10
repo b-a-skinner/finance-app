@@ -1,5 +1,41 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { RECURRENCE_OPTIONS, RECURRENCE_LABELS } from '../components/BusinessShared';
+
+// ---------------------------------------------------------------------------
+// Recurrence badge CSS — must be plain text, no pill/button styling
+// ---------------------------------------------------------------------------
+
+describe('.recurrence-badge CSS', () => {
+  const css = readFileSync(resolve(__dirname, '../index.css'), 'utf-8');
+  const match = css.match(/\.recurrence-badge\s*\{([^}]+)\}/);
+  const block = match ? match[1] : '';
+
+  it('CSS block is found', () => {
+    expect(block).not.toBe('');
+  });
+
+  it('has no background (no pill/card styling)', () => {
+    expect(block).not.toMatch(/background/);
+  });
+
+  it('has no border (not a bordered badge)', () => {
+    expect(block).not.toMatch(/\bborder\b/);
+  });
+
+  it('has no border-radius (not pill-shaped)', () => {
+    expect(block).not.toMatch(/border-radius/);
+  });
+
+  it('has no padding (not a button-style element)', () => {
+    expect(block).not.toMatch(/\bpadding\b/);
+  });
+
+  it('uses a subdued grey color (not a bright accent)', () => {
+    expect(block).toMatch(/color/);
+  });
+});
 
 describe('RECURRENCE_OPTIONS', () => {
   it('has exactly 10 options', () => {

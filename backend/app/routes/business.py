@@ -43,6 +43,70 @@ _FREQ_MONTH_DELTA = {
 }
 
 
+def _backfill_income(item: "BusinessIncome", db: "Session", today: date) -> None:
+    """
+    Creates confirmed transactions for all past occurrences of a newly-created recurring
+    income entry, then advances the rolling entry to the first future occurrence.
+    If every occurrence is already past (or beyond end_date), deactivates the entry.
+    """
+    freq      = item.recurrence_freq
+    end_date  = item.recurrence_end_date
+    occurrence = item.date_received
+
+    while occurrence <= today and (end_date is None or occurrence <= end_date):
+        db.add(BusinessIncome(
+            user_id=item.user_id,
+            amount=item.amount,
+            date_received=occurrence,
+            description=item.description,
+            is_active=True,
+            is_approved=True,
+            recurrence_freq=None,
+            recurrence_end_date=None,
+        ))
+        occurrence = _advance_date(occurrence, freq)
+
+    if occurrence > today and (end_date is None or occurrence <= end_date):
+        item.date_received = occurrence
+    else:
+        item.is_active = False
+
+
+def _backfill_expense(item: "BusinessExpense", db: "Session", today: date) -> None:
+    """
+    Creates confirmed transactions for all past occurrences of a newly-created recurring
+    expense entry, then advances the rolling entry to the first future occurrence.
+    """
+    freq      = item.recurrence_freq
+    end_date  = item.recurrence_end_date
+    occurrence = item.date_incurred
+
+    while occurrence <= today and (end_date is None or occurrence <= end_date):
+        db.add(BusinessExpense(
+            user_id=item.user_id,
+            amount=item.amount,
+            date_incurred=occurrence,
+            category=item.category,
+            description=item.description,
+            is_allowable=item.is_allowable,
+            is_active=True,
+            is_approved=True,
+            business_use_percent=item.business_use_percent,
+            expense_method=item.expense_method,
+            home_office_hours_band=item.home_office_hours_band,
+            business_miles=item.business_miles,
+            vehicle_type=item.vehicle_type,
+            recurrence_freq=None,
+            recurrence_end_date=None,
+        ))
+        occurrence = _advance_date(occurrence, freq)
+
+    if occurrence > today and (end_date is None or occurrence <= end_date):
+        item.date_incurred = occurrence
+    else:
+        item.is_active = False
+
+
 def _advance_date(from_date: date, freq: str) -> date:
     if freq in _FREQ_DAY_DELTA:
         return from_date + timedelta(days=_FREQ_DAY_DELTA[freq])
@@ -200,9 +264,17 @@ def create_income(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    is_approved = body.date_received <= date.today()
-    item = BusinessIncome(**body.model_dump(), user_id=current_user.id, is_approved=is_approved)
-    db.add(item)
+    if body.recurrence_freq:
+        # Rolling recurring entry always starts unapproved; past occurrences are backfilled.
+        item = BusinessIncome(**body.model_dump(), user_id=current_user.id, is_approved=False)
+        db.add(item)
+        db.flush()
+        if body.date_received <= date.today():
+            _backfill_income(item, db, date.today())
+    else:
+        is_approved = body.date_received <= date.today()
+        item = BusinessIncome(**body.model_dump(), user_id=current_user.id, is_approved=is_approved)
+        db.add(item)
     db.commit()
     db.refresh(item)
     return item
@@ -334,9 +406,16 @@ def create_expense(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    is_approved = body.date_incurred <= date.today()
-    item = BusinessExpense(**body.model_dump(), user_id=current_user.id, is_approved=is_approved)
-    db.add(item)
+    if body.recurrence_freq:
+        item = BusinessExpense(**body.model_dump(), user_id=current_user.id, is_approved=False)
+        db.add(item)
+        db.flush()
+        if body.date_incurred <= date.today():
+            _backfill_expense(item, db, date.today())
+    else:
+        is_approved = body.date_incurred <= date.today()
+        item = BusinessExpense(**body.model_dump(), user_id=current_user.id, is_approved=is_approved)
+        db.add(item)
     db.commit()
     db.refresh(item)
     return item

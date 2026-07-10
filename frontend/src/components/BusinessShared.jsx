@@ -212,6 +212,9 @@ export function ModalShell({ title, onClose, children }) {
 
 export function IncomeModal({ onClose, onSuccess, item }) {
   const { apiFetch } = useAuth();
+  // Show recurrence controls only when creating a new entry or editing the rolling Upcoming entry
+  // (is_approved=false). Confirmed/past transactions are one-off and must not expose recurrence UI.
+  const showRecurrenceControls = !item || item.is_approved === false;
   const [form, setForm] = useState({
     amount:               item?.amount ?? '',
     date_received:        item?.date_received ?? today(),
@@ -264,13 +267,15 @@ export function IncomeModal({ onClose, onSuccess, item }) {
             <p className="scheduled-flag">Scheduled — this won't count towards your figures until its date passes and you approve it.</p>
           )}
         </div>
-        <div className="form-group">
-          <label htmlFor="bi-recur">Repeats</label>
-          <select id="bi-recur" value={form.recurrence_freq} onChange={e => field('recurrence_freq', e.target.value)}>
-            {RECURRENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        {form.recurrence_freq && (
+        {showRecurrenceControls && (
+          <div className="form-group">
+            <label htmlFor="bi-recur">Repeats</label>
+            <select id="bi-recur" value={form.recurrence_freq} onChange={e => field('recurrence_freq', e.target.value)}>
+              {RECURRENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        )}
+        {showRecurrenceControls && form.recurrence_freq && (
           <div className="form-group">
             <label htmlFor="bi-recur-end">Repeat until <span className="form-hint-inline">(optional — leave blank for ongoing)</span></label>
             <input id="bi-recur-end" type="date" value={form.recurrence_end_date} onChange={e => field('recurrence_end_date', e.target.value)} />
@@ -292,6 +297,7 @@ export function IncomeModal({ onClose, onSuccess, item }) {
 
 export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
   const { apiFetch } = useAuth();
+  const showRecurrenceControls = !item || item.is_approved === false;
 
   const initCat = item?.category ?? 'equipment';
 
@@ -602,13 +608,15 @@ export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
           )}
         </div>
 
-        <div className="form-group">
-          <label htmlFor="be-recur">Repeats</label>
-          <select id="be-recur" value={form.recurrence_freq} onChange={e => field('recurrence_freq', e.target.value)}>
-            {RECURRENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        {form.recurrence_freq && (
+        {showRecurrenceControls && (
+          <div className="form-group">
+            <label htmlFor="be-recur">Repeats</label>
+            <select id="be-recur" value={form.recurrence_freq} onChange={e => field('recurrence_freq', e.target.value)}>
+              {RECURRENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        )}
+        {showRecurrenceControls && form.recurrence_freq && (
           <div className="form-group">
             <label htmlFor="be-recur-end">Repeat until <span className="form-hint-inline">(optional — leave blank for ongoing)</span></label>
             <input id="be-recur-end" type="date" value={form.recurrence_end_date} onChange={e => field('recurrence_end_date', e.target.value)} />

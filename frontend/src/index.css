@@ -2422,14 +2422,10 @@ button.checklist-link {
 }
 
 .recurrence-badge {
-  font-size: 0.78rem;
-  color: #1e40af;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 5px;
-  padding: 0.2rem 0.5rem;
-  margin: 0.3rem 0 0.1rem;
-  display: inline-block;
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin: 0.2rem 0 0;
+  line-height: 1.4;
 }
 
 /* ── Upcoming page ───────────────────────────────────────────── */
