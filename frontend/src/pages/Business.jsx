@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import { useAuth } from '../context/AuthContext';
 import { gbp } from '../utils/format';
@@ -194,7 +194,17 @@ export default function Business() {
                   </p>
                   <details className="biz-class2-explainer">
                     <summary>What does this mean for my State Pension?</summary>
-                    <p>{CLASS2_PENSION_EXPLAINER}</p>
+                    <p>
+                      {CLASS2_PENSION_EXPLAINER.split('gov.uk/check-state-pension')[0]}
+                      <a
+                        href="https://www.gov.uk/check-state-pension"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        gov.uk/check-state-pension
+                      </a>
+                      {CLASS2_PENSION_EXPLAINER.split('gov.uk/check-state-pension')[1]}
+                    </p>
                   </details>
                 </li>
               </ul>
@@ -206,9 +216,7 @@ export default function Business() {
           </div>
         )}
 
-        <p className="biz-transactions-link">
-          <Link to="/transactions">View all transactions</Link>
-        </p>
+
 
         {disclaimer}
       </main>

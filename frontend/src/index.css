@@ -2186,12 +2186,6 @@ button.checklist-link {
   font-size: 0.78rem;
 }
 
-.biz-transactions-link {
-  text-align: center;
-  margin-top: 1.5rem;
-  font-size: 0.9rem;
-}
-
 .biz-disclaimer {
   font-size: 0.78rem;
   color: var(--color-text-muted);
