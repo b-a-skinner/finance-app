@@ -43,6 +43,16 @@ export const BAND_LABELS = {
 // Pure helpers
 // ---------------------------------------------------------------------------
 
+export function homeOfficeFlatAllowance(band, taxConfig) {
+  if (!taxConfig || !band) return null;
+  const value = {
+    '25_50':    taxConfig.home_office_band_25_50,
+    '51_100':   taxConfig.home_office_band_51_100,
+    '101_plus': taxConfig.home_office_band_101_plus,
+  }[band];
+  return value ?? null;
+}
+
 export function defaultMethodForCat(cat) {
   if (cat === 'home_office') return 'home_office_flat';
   if (cat === 'travel')      return 'mileage';

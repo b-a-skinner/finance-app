@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { gbp } from '../utils/format';
 import {
   Tip, IncomeModal, ExpenseModal,
-  activityLabel, activityDetail,
+  activityLabel, activityDetail, homeOfficeFlatAllowance,
 } from '../components/BusinessShared';
 
 export default function Transactions() {
@@ -91,7 +91,8 @@ export default function Transactions() {
                 const isFlatHO = !isIncome && entry.expense_method === 'home_office_flat';
                 const label    = activityLabel(entry, taxConfig);
                 const detail   = activityDetail(entry, taxConfig);
-                const mileAttr = isMile ? (summary?.mileage_attribution?.[entry.id] ?? 0) : null;
+                const mileAttr   = isMile   ? (summary?.mileage_attribution?.[entry.id] ?? 0) : null;
+                const flatHOAmt  = isFlatHO ? homeOfficeFlatAllowance(entry.home_office_hours_band, taxConfig) : null;
                 return (
                   <li key={`${entry._type}-${entry.id}`} className="item-row business-activity-row">
                     <div className="item-info">
@@ -109,6 +110,8 @@ export default function Transactions() {
                       <span className="business-amount business-amount--income">+{gbp(entry.amount)}</span>
                     ) : isMile ? (
                       <span className="business-amount business-amount--expense">−{gbp(mileAttr)}</span>
+                    ) : isFlatHO && flatHOAmt != null ? (
+                      <span className="business-amount business-amount--expense">−{gbp(flatHOAmt)}</span>
                     ) : isFlatHO ? null : (
                       <span className="business-amount business-amount--expense">−{gbp(entry.amount)}</span>
                     )}

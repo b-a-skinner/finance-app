@@ -493,6 +493,76 @@ class TestHomeOfficeFlatRate:
         body = client.get(SUMMARY_URL, headers=h).json()
         assert body["allowable_expenses_ytd"] == pytest.approx(80.0)
 
+    def test_flat_rate_excluded_from_cash_with_mixed_expenses(self, client, db):
+        """HO flat rate (25_50 band = £10) must NOT inflate cash spend, but MUST count as allowable.
+        A regular £200 cash expense sits alongside it to confirm separation."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 200.0, "date_incurred": d, "category": "software", "is_allowable": True,
+        }, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "home_office",
+            "is_allowable": True, "expense_method": "home_office_flat",
+            "home_office_hours_band": "25_50",
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        # Config seeds home_office_band_25_50 = £10
+        assert body["total_expenses_ytd"]     == pytest.approx(200.0)   # cash only; HO excluded
+        assert body["allowable_expenses_ytd"] == pytest.approx(210.0)   # cash + £10 flat rate
+        assert body["cash_profit"]            == pytest.approx(4800.0)  # 5000 - 200
+        assert body["taxable_profit"]         == pytest.approx(4790.0)  # 5000 - 210
+
+    def test_allowable_exceeds_cash_with_ho_flat_and_mileage(self, client, db):
+        """Both HO flat rate and mileage are allowances with no cash outlay.
+        allowable_expenses_ytd can legitimately exceed total_expenses_ytd."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 10000.0, "date_received": d}, headers=h)
+        # £100 cash expense
+        client.post(EXPENSE_URL, json={
+            "amount": 100.0, "date_incurred": d, "category": "software", "is_allowable": True,
+        }, headers=h)
+        # £26 HO flat rate (no cash)
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "home_office",
+            "is_allowable": True, "expense_method": "home_office_flat",
+            "home_office_hours_band": "101_plus",
+        }, headers=h)
+        # 200 car/van miles = £110 allowance (no cash)
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "travel",
+            "is_allowable": True, "expense_method": "mileage",
+            "business_miles": 200, "vehicle_type": "car_van",
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_expenses_ytd"]     == pytest.approx(100.0)           # only the cash expense
+        assert body["total_mileage_allowance"] == pytest.approx(110.0)          # 200 × 0.55
+        assert body["allowable_expenses_ytd"] == pytest.approx(236.0)           # 100 + 26 + 110
+        assert body["allowable_expenses_ytd"] > body["total_expenses_ytd"]      # allowance-only entries make this valid
+
+    def test_flat_rate_value_comes_from_config_not_hardcoded(self, client, db):
+        """The 51_100 band (£18) is distinct from 25_50 (£10) and 101_plus (£26).
+        Asserting the specific value confirms we read from config, not hardcode."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "home_office",
+            "is_allowable": True, "expense_method": "home_office_flat",
+            "home_office_hours_band": "51_100",
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["allowable_expenses_ytd"] == pytest.approx(18.0)   # 51_100 band from seeded config
+        assert body["total_expenses_ytd"]     == pytest.approx(0.0)
+
 
 # ---------------------------------------------------------------------------
 # Percentage (partial business use)
