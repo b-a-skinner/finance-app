@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import { useAuth } from '../context/AuthContext';
 import { gbp } from '../utils/format';
-import { CATEGORY_INFO, VEHICLE_LABELS, formatDate, today, fmtMiles } from '../components/BusinessShared';
+import { CATEGORY_INFO, VEHICLE_LABELS, RECURRENCE_LABELS, formatDate, today, fmtMiles } from '../components/BusinessShared';
 
 function entryLabel(entry) {
   if (entry._type === 'income') return entry.description || 'Income';
@@ -54,9 +54,11 @@ function ApprovalItem({ entry, apiFetch, onRefresh }) {
   async function handleDismiss() {
     setSaving(true);
     setError('');
-    const url = isIncome ? `/api/business/income/${entry.id}` : `/api/business/expenses/${entry.id}`;
+    const url = isIncome
+      ? `/api/business/income/${entry.id}/dismiss`
+      : `/api/business/expenses/${entry.id}/dismiss`;
     try {
-      const res = await apiFetch(url, { method: 'DELETE' });
+      const res = await apiFetch(url, { method: 'POST' });
       if (!res.ok) throw new Error('Failed to dismiss.');
       onRefresh();
     } catch (err) {
@@ -71,6 +73,12 @@ function ApprovalItem({ entry, apiFetch, onRefresh }) {
         <span className="approval-item-kind">{isIncome ? 'Income' : (CATEGORY_INFO[entry.category]?.label ?? entry.category)}</span>
         <span className="approval-item-type-badge">{isIncome ? 'income' : 'expense'}</span>
       </div>
+      {entry.recurrence_freq && (
+        <p className="recurrence-badge">
+          Recurring {RECURRENCE_LABELS[entry.recurrence_freq]}
+          {entry.recurrence_end_date ? `, until ${formatDate(entry.recurrence_end_date)}` : ''}
+        </p>
+      )}
       {entry.description && (
         <p className="approval-item-desc">{entry.description}</p>
       )}
@@ -126,6 +134,12 @@ function ScheduledItem({ entry, apiFetch, onRefresh }) {
         <span className="scheduled-item-date">{formatDate(entry._date)}</span>
         <span className="scheduled-item-amount">{entryAmount(entry)}</span>
       </div>
+      {entry.recurrence_freq && (
+        <p className="recurrence-badge">
+          Recurring {RECURRENCE_LABELS[entry.recurrence_freq]}
+          {entry.recurrence_end_date ? `, until ${formatDate(entry.recurrence_end_date)}` : ''}
+        </p>
+      )}
       <button className="scheduled-item-remove" onClick={handleRemove} disabled={removing} aria-label="Remove">
         ×
       </button>

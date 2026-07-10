@@ -327,12 +327,16 @@ class BusinessIncomeCreate(BaseModel):
     amount: float
     date_received: date
     description: str | None = None
+    recurrence_freq: str | None = None
+    recurrence_end_date: date | None = None
 
 
 class BusinessIncomeUpdate(BaseModel):
     amount: float | None = None
     date_received: date | None = None
     description: str | None = None
+    recurrence_freq: str | None = None
+    recurrence_end_date: date | None = None
 
 
 class BusinessIncomeOut(BaseModel):
@@ -342,6 +346,8 @@ class BusinessIncomeOut(BaseModel):
     date_received: date
     description: str | None
     is_approved: bool
+    recurrence_freq: str | None = None
+    recurrence_end_date: date | None = None
 
 
 class BusinessExpenseCreate(BaseModel):
@@ -355,6 +361,8 @@ class BusinessExpenseCreate(BaseModel):
     home_office_hours_band: str | None = None
     business_miles: int | None = None
     vehicle_type: str | None = None
+    recurrence_freq: str | None = None
+    recurrence_end_date: date | None = None
 
 
 class BusinessExpenseUpdate(BaseModel):
@@ -368,6 +376,8 @@ class BusinessExpenseUpdate(BaseModel):
     home_office_hours_band: str | None = None
     business_miles: int | None = None
     vehicle_type: str | None = None
+    recurrence_freq: str | None = None
+    recurrence_end_date: date | None = None
 
 
 class BusinessExpenseOut(BaseModel):
@@ -384,6 +394,8 @@ class BusinessExpenseOut(BaseModel):
     business_miles: int | None
     vehicle_type: str | None
     is_approved: bool
+    recurrence_freq: str | None = None
+    recurrence_end_date: date | None = None
 
 
 class ApproveIncomeBody(BaseModel):

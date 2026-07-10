@@ -33,6 +33,23 @@ export const DUAL_CATS          = ['home_office','other'];
 
 export const VEHICLE_LABELS = { car_van: 'car/van', motorcycle: 'motorcycle', bicycle: 'bicycle' };
 
+export const RECURRENCE_OPTIONS = [
+  { value: '',            label: 'Does not recur' },
+  { value: 'weekly',      label: 'Weekly' },
+  { value: 'two_weekly',  label: 'Two Weekly' },
+  { value: 'four_weekly', label: 'Four Weekly' },
+  { value: 'monthly',     label: 'Monthly' },
+  { value: 'two_monthly', label: 'Two Monthly' },
+  { value: 'quarterly',   label: 'Quarterly' },
+  { value: 'biannually',  label: 'Biannually' },
+  { value: 'annually',    label: 'Annually' },
+  { value: 'two_yearly',  label: '2-Yearly' },
+];
+
+export const RECURRENCE_LABELS = Object.fromEntries(
+  RECURRENCE_OPTIONS.filter(o => o.value).map(o => [o.value, o.label])
+);
+
 export const BAND_LABELS = {
   '25_50':    '25–50 hours/month',
   '51_100':   '51–100 hours/month',
@@ -196,9 +213,11 @@ export function ModalShell({ title, onClose, children }) {
 export function IncomeModal({ onClose, onSuccess, item }) {
   const { apiFetch } = useAuth();
   const [form, setForm] = useState({
-    amount: item?.amount ?? '',
-    date_received: item?.date_received ?? today(),
-    description: item?.description ?? '',
+    amount:               item?.amount ?? '',
+    date_received:        item?.date_received ?? today(),
+    description:          item?.description ?? '',
+    recurrence_freq:      item?.recurrence_freq ?? '',
+    recurrence_end_date:  item?.recurrence_end_date ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
@@ -214,10 +233,14 @@ export function IncomeModal({ onClose, onSuccess, item }) {
     setSaving(true);
     try {
       const url = item ? `/api/business/income/${item.id}` : '/api/business/income';
-      const res = await apiFetch(url, {
-        method: item ? 'PATCH' : 'POST',
-        body: JSON.stringify({ amount, date_received: form.date_received, description: form.description.trim() || null }),
-      });
+      const body = {
+        amount,
+        date_received: form.date_received,
+        description: form.description.trim() || null,
+        recurrence_freq: form.recurrence_freq || null,
+        recurrence_end_date: form.recurrence_freq && form.recurrence_end_date ? form.recurrence_end_date : null,
+      };
+      const res = await apiFetch(url, { method: item ? 'PATCH' : 'POST', body: JSON.stringify(body) });
       if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.detail || 'Failed to save.'); }
       onSuccess();
     } catch (err) {
@@ -241,6 +264,18 @@ export function IncomeModal({ onClose, onSuccess, item }) {
             <p className="scheduled-flag">Scheduled — this won't count towards your figures until its date passes and you approve it.</p>
           )}
         </div>
+        <div className="form-group">
+          <label htmlFor="bi-recur">Repeats</label>
+          <select id="bi-recur" value={form.recurrence_freq} onChange={e => field('recurrence_freq', e.target.value)}>
+            {RECURRENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+        {form.recurrence_freq && (
+          <div className="form-group">
+            <label htmlFor="bi-recur-end">Repeat until <span className="form-hint-inline">(optional — leave blank for ongoing)</span></label>
+            <input id="bi-recur-end" type="date" value={form.recurrence_end_date} onChange={e => field('recurrence_end_date', e.target.value)} />
+          </div>
+        )}
         <div className="form-group">
           <label htmlFor="bi-desc">Description <span className="form-hint-inline">(optional)</span></label>
           <input id="bi-desc" type="text" value={form.description} onChange={e => field('description', e.target.value)} placeholder="e.g. Invoice payment, day's takings" />
@@ -273,6 +308,8 @@ export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
       business_miles:         src?.business_miles != null ? String(src.business_miles) : '',
       vehicle_type:           src?.vehicle_type ?? 'car_van',
       business_use_percent:   src?.business_use_percent != null ? String(src.business_use_percent) : '100',
+      recurrence_freq:        src?.recurrence_freq ?? '',
+      recurrence_end_date:    src?.recurrence_end_date ?? '',
     };
   }
 
@@ -285,8 +322,10 @@ export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
   function handleCategoryChange(cat) {
     setForm(p => ({
       ...initForm(cat, null),
-      date_incurred: p.date_incurred,
-      description:   p.description,
+      date_incurred:       p.date_incurred,
+      description:         p.description,
+      recurrence_freq:     p.recurrence_freq,
+      recurrence_end_date: p.recurrence_end_date,
     }));
   }
 
@@ -319,6 +358,11 @@ export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
 
     if (!form.date_incurred) { setError('Date is required.'); return; }
 
+    const recurrenceFields = {
+      recurrence_freq:     form.recurrence_freq || null,
+      recurrence_end_date: form.recurrence_freq && form.recurrence_end_date ? form.recurrence_end_date : null,
+    };
+
     let payload;
 
     if (isMileage) {
@@ -335,6 +379,7 @@ export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
         business_miles: miles,
         vehicle_type: form.vehicle_type,
         business_use_percent: 100,
+        ...recurrenceFields,
       };
 
     } else if (isFlatRate) {
@@ -348,6 +393,7 @@ export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
         expense_method: 'home_office_flat',
         home_office_hours_band: form.home_office_hours_band,
         business_use_percent: 100,
+        ...recurrenceFields,
       };
 
     } else if (isPercentage) {
@@ -363,6 +409,7 @@ export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
         is_allowable: true,
         expense_method: form.expense_method,
         business_use_percent: pct,
+        ...recurrenceFields,
       };
 
     } else {
@@ -375,6 +422,7 @@ export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
         description: form.description.trim() || null,
         is_allowable: form.is_allowable,
         business_use_percent: 100,
+        ...recurrenceFields,
       };
     }
 
@@ -553,6 +601,19 @@ export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
             <p className="scheduled-flag">Scheduled — this won't count towards your figures until its date passes and you approve it.</p>
           )}
         </div>
+
+        <div className="form-group">
+          <label htmlFor="be-recur">Repeats</label>
+          <select id="be-recur" value={form.recurrence_freq} onChange={e => field('recurrence_freq', e.target.value)}>
+            {RECURRENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+        {form.recurrence_freq && (
+          <div className="form-group">
+            <label htmlFor="be-recur-end">Repeat until <span className="form-hint-inline">(optional — leave blank for ongoing)</span></label>
+            <input id="be-recur-end" type="date" value={form.recurrence_end_date} onChange={e => field('recurrence_end_date', e.target.value)} />
+          </div>
+        )}
 
         <div className="form-group">
           <label htmlFor="be-desc">Description <span className="form-hint-inline">(optional)</span></label>

@@ -165,6 +165,8 @@ class BusinessIncome(TimestampMixin, Base):
     description: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_approved: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    recurrence_freq: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    recurrence_end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="business_income")
 
@@ -188,5 +190,7 @@ class BusinessExpense(TimestampMixin, Base):
     home_office_hours_band: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # 25_50|51_100|101_plus
     business_miles: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     vehicle_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)          # car_van|motorcycle|bicycle
+    recurrence_freq: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    recurrence_end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="business_expenses")

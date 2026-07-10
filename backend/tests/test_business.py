@@ -1282,3 +1282,356 @@ class TestUpcomingAndApproval:
         item_id = client.post(INCOME_URL, json={"amount": 500.0, "date_received": FUTURE}, headers=alice).json()["id"]
         r = client.post(f"{INCOME_URL}/{item_id}/approve", json={}, headers=bob)
         assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Recurring income/expense items
+# ---------------------------------------------------------------------------
+
+class TestRecurringItems:
+    # --- creation ---
+
+    def test_create_recurring_income_stores_frequency(self, client):
+        h = auth(client)
+        r = client.post(INCOME_URL, json={"amount": 500.0, "date_received": FUTURE, "recurrence_freq": "monthly"}, headers=h)
+        assert r.status_code == 201
+        body = r.json()
+        assert body["recurrence_freq"] == "monthly"
+        assert body["recurrence_end_date"] is None
+
+    def test_create_recurring_expense_stores_frequency(self, client):
+        h = auth(client)
+        r = client.post(EXPENSE_URL, json={
+            "amount": 100.0, "date_incurred": FUTURE, "category": "software",
+            "recurrence_freq": "weekly", "recurrence_end_date": FUTURE,
+        }, headers=h)
+        assert r.status_code == 201
+        body = r.json()
+        assert body["recurrence_freq"] == "weekly"
+        assert body["recurrence_end_date"] == FUTURE
+
+    def test_non_recurring_income_has_null_freq(self, client):
+        h = auth(client)
+        body = client.post(INCOME_URL, json={"amount": 100.0, "date_received": TODAY}, headers=h).json()
+        assert body["recurrence_freq"] is None
+        assert body["recurrence_end_date"] is None
+
+    # --- approve recurring: creates confirmed + rolls forward ---
+
+    def test_approve_recurring_income_creates_confirmed_transaction(self, client):
+        h = auth(client)
+        # Create a recurring entry due PAST (awaiting approval)
+        item = client.post(INCOME_URL, json={
+            "amount": 500.0, "date_received": PAST, "recurrence_freq": "monthly",
+        }, headers=h).json()
+        item_id = item["id"]
+        # Force is_approved=False so it shows in upcoming (past recurring is already approved on creation…
+        # use a future date entry for simplicity)
+        # Actually: PAST <= today so is_approved=True on creation. Use a workaround: create with future,
+        # then we need it to appear in upcoming. Use future date so it's in upcoming.
+        # For this test: create past date, force approval off via DB manipulation is complex without
+        # direct db access. Instead use a PAST entry: it's already approved. That's not what we want.
+        # Better: create with FUTURE, then use a past date at approve time.
+        item2 = client.post(INCOME_URL, json={
+            "amount": 500.0, "date_received": FUTURE, "recurrence_freq": "monthly",
+        }, headers=h).json()
+        item2_id = item2["id"]
+        assert item2["is_approved"] is False
+
+        # Approve with a past date to trigger confirmation
+        r = client.post(f"{INCOME_URL}/{item2_id}/approve", json={"date_received": PAST}, headers=h)
+        assert r.status_code == 200
+        recurring = r.json()
+
+        # Confirmed transaction should now be in the income list (is_approved=True, non-recurring)
+        income_list = client.get(INCOME_URL, headers=h).json()
+        confirmed = [i for i in income_list if i["amount"] == 500.0 and i["recurrence_freq"] is None]
+        assert len(confirmed) == 1
+        assert confirmed[0]["date_received"] == PAST
+        assert confirmed[0]["is_approved"] is True
+
+        # Recurring entry should have rolled forward (still in upcoming)
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        recurring_ids = [i["id"] for i in upcoming["income"]]
+        assert item2_id in recurring_ids
+
+    def test_approve_recurring_expense_creates_confirmed_transaction(self, client):
+        h = auth(client)
+        item = client.post(EXPENSE_URL, json={
+            "amount": 200.0, "date_incurred": FUTURE, "category": "software",
+            "recurrence_freq": "quarterly",
+        }, headers=h).json()
+        item_id = item["id"]
+
+        r = client.post(f"{EXPENSE_URL}/{item_id}/approve", json={"date_incurred": PAST}, headers=h)
+        assert r.status_code == 200
+
+        expense_list = client.get(EXPENSE_URL, headers=h).json()
+        confirmed = [e for e in expense_list if e["amount"] == 200.0 and e["recurrence_freq"] is None]
+        assert len(confirmed) == 1
+        assert confirmed[0]["is_approved"] is True
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        expense_ids = [e["id"] for e in upcoming["expenses"]]
+        assert item_id in expense_ids
+
+    def test_approve_recurring_per_occurrence_amount_edit_does_not_change_recurrence(self, client):
+        """Editing amount at approval only affects the confirmed transaction."""
+        h = auth(client)
+        item_id = client.post(INCOME_URL, json={
+            "amount": 1000.0, "date_received": FUTURE, "recurrence_freq": "monthly",
+        }, headers=h).json()["id"]
+
+        # Approve with an edited amount (£800 instead of £1000)
+        client.post(f"{INCOME_URL}/{item_id}/approve", json={"date_received": PAST, "amount": 800.0}, headers=h)
+
+        # Confirmed transaction should have £800
+        income_list = client.get(INCOME_URL, headers=h).json()
+        confirmed = [i for i in income_list if i["recurrence_freq"] is None]
+        assert len(confirmed) == 1
+        assert confirmed[0]["amount"] == pytest.approx(800.0)
+
+        # Recurring entry retains original £1000 for future occurrences
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        recurring = next(i for i in upcoming["income"] if i["id"] == item_id)
+        assert recurring["amount"] == pytest.approx(1000.0)
+
+    def test_approve_recurring_income_with_future_date_reschedules_not_confirms(self, client):
+        h = auth(client)
+        far_future = (date.today() + timedelta(days=60)).isoformat()
+        item_id = client.post(INCOME_URL, json={
+            "amount": 500.0, "date_received": FUTURE, "recurrence_freq": "monthly",
+        }, headers=h).json()["id"]
+
+        # Approve with a still-future date
+        r = client.post(f"{INCOME_URL}/{item_id}/approve", json={"date_received": far_future}, headers=h)
+        assert r.status_code == 200
+
+        # No confirmed transaction should have been created
+        income_list = client.get(INCOME_URL, headers=h).json()
+        confirmed = [i for i in income_list if i["recurrence_freq"] is None]
+        assert confirmed == []
+
+        # Recurring entry should still be in upcoming with updated date
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        rec = next((i for i in upcoming["income"] if i["id"] == item_id), None)
+        assert rec is not None
+        assert rec["date_received"] == far_future
+
+    # --- dismiss recurring: skips one occurrence, rolls forward ---
+
+    def test_dismiss_recurring_income_rolls_forward(self, client):
+        h = auth(client)
+        item_id = client.post(INCOME_URL, json={
+            "amount": 500.0, "date_received": FUTURE, "recurrence_freq": "monthly",
+        }, headers=h).json()["id"]
+
+        r = client.post(f"{INCOME_URL}/{item_id}/dismiss", headers=h)
+        assert r.status_code == 204
+
+        # No confirmed transaction
+        income_list = client.get(INCOME_URL, headers=h).json()
+        assert income_list == []
+
+        # Recurring entry still in upcoming (rolled to next month)
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        rec_ids = [i["id"] for i in upcoming["income"]]
+        assert item_id in rec_ids
+
+    def test_dismiss_recurring_expense_rolls_forward(self, client):
+        h = auth(client)
+        item_id = client.post(EXPENSE_URL, json={
+            "amount": 100.0, "date_incurred": FUTURE, "category": "software",
+            "recurrence_freq": "quarterly",
+        }, headers=h).json()["id"]
+
+        r = client.post(f"{EXPENSE_URL}/{item_id}/dismiss", headers=h)
+        assert r.status_code == 204
+
+        expense_list = client.get(EXPENSE_URL, headers=h).json()
+        assert expense_list == []
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        rec_ids = [e["id"] for e in upcoming["expenses"]]
+        assert item_id in rec_ids
+
+    def test_dismiss_non_recurring_income_soft_deletes(self, client):
+        h = auth(client)
+        item_id = client.post(INCOME_URL, json={"amount": 500.0, "date_received": FUTURE}, headers=h).json()["id"]
+        r = client.post(f"{INCOME_URL}/{item_id}/dismiss", headers=h)
+        assert r.status_code == 204
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        assert all(i["id"] != item_id for i in upcoming["income"])
+
+    def test_dismiss_non_recurring_expense_soft_deletes(self, client):
+        h = auth(client)
+        item_id = client.post(EXPENSE_URL, json={
+            "amount": 100.0, "date_incurred": FUTURE, "category": "software",
+        }, headers=h).json()["id"]
+        r = client.post(f"{EXPENSE_URL}/{item_id}/dismiss", headers=h)
+        assert r.status_code == 204
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        assert all(e["id"] != item_id for e in upcoming["expenses"])
+
+    # --- end date: recurrence stops after crossing end_date ---
+
+    def test_recurrence_ends_when_next_date_exceeds_end_date(self, client):
+        """After the last valid occurrence is approved, the recurring entry disappears."""
+        h = auth(client)
+        # Create a weekly recurring entry due tomorrow with end_date = day after tomorrow.
+        # After approval, next date would be +7 days, exceeding end_date → entry deactivated.
+        tomorrow     = (date.today() + timedelta(days=1)).isoformat()
+        end          = (date.today() + timedelta(days=3)).isoformat()
+        item_id = client.post(INCOME_URL, json={
+            "amount": 300.0, "date_received": tomorrow,
+            "recurrence_freq": "weekly", "recurrence_end_date": end,
+        }, headers=h).json()["id"]
+
+        # Approve today (using a past date to force confirmation)
+        client.post(f"{INCOME_URL}/{item_id}/approve", json={"date_received": PAST}, headers=h)
+
+        # The recurring entry's next date (+7 days) exceeds end_date, so it was deactivated.
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        assert all(i["id"] != item_id for i in upcoming["income"])
+
+        # The confirmed transaction still exists.
+        income_list = client.get(INCOME_URL, headers=h).json()
+        confirmed = [i for i in income_list if i["amount"] == pytest.approx(300.0)]
+        assert len(confirmed) == 1
+
+    def test_recurrence_ends_on_dismiss_when_next_date_exceeds_end_date(self, client):
+        h = auth(client)
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        end      = (date.today() + timedelta(days=2)).isoformat()
+        item_id = client.post(INCOME_URL, json={
+            "amount": 200.0, "date_received": tomorrow,
+            "recurrence_freq": "weekly", "recurrence_end_date": end,
+        }, headers=h).json()["id"]
+
+        client.post(f"{INCOME_URL}/{item_id}/dismiss", headers=h)
+
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        assert all(i["id"] != item_id for i in upcoming["income"])
+        # No transaction created on dismiss
+        income_list = client.get(INCOME_URL, headers=h).json()
+        assert income_list == []
+
+    # --- delete stops all future occurrences ---
+
+    def test_delete_recurring_income_stops_future_occurrences(self, client):
+        h = auth(client)
+        # Approve one occurrence first so we have a confirmed transaction.
+        item_id = client.post(INCOME_URL, json={
+            "amount": 500.0, "date_received": FUTURE, "recurrence_freq": "monthly",
+        }, headers=h).json()["id"]
+        # Approve occurrence using a past date
+        client.post(f"{INCOME_URL}/{item_id}/approve", json={"date_received": PAST}, headers=h)
+
+        # Now delete the recurring entry.
+        r = client.delete(f"{INCOME_URL}/{item_id}", headers=h)
+        assert r.status_code == 204
+
+        # Recurring entry gone from upcoming.
+        upcoming = client.get(UPCOMING_URL, headers=h).json()
+        assert all(i["id"] != item_id for i in upcoming["income"])
+
+        # Confirmed transaction still in income list.
+        income_list = client.get(INCOME_URL, headers=h).json()
+        assert any(i["amount"] == pytest.approx(500.0) and i["recurrence_freq"] is None for i in income_list)
+
+    # --- confirmed transactions count in analytics ---
+
+    def test_confirmed_recurring_transaction_counts_in_summary(self, client, db):
+        h = auth(client)
+        item_id = client.post(INCOME_URL, json={
+            "amount": 1000.0, "date_received": FUTURE, "recurrence_freq": "monthly",
+        }, headers=h).json()["id"]
+
+        # Summary before approval: revenue = 0
+        assert client.get(SUMMARY_URL, headers=h).json()["revenue_ytd"] == pytest.approx(0.0)
+
+        # Approve using a tax-year date so it counts in YTD
+        tax_date = _this_year_april_6().isoformat()
+        client.post(f"{INCOME_URL}/{item_id}/approve", json={"date_received": tax_date}, headers=h)
+
+        assert client.get(SUMMARY_URL, headers=h).json()["revenue_ytd"] == pytest.approx(1000.0)
+
+    # --- date advancement helper correctness ---
+
+    def test_advance_weekly(self):
+        from app.routes.business import _advance_date
+        from datetime import date
+        assert _advance_date(date(2026, 1, 1), "weekly") == date(2026, 1, 8)
+
+    def test_advance_two_weekly(self):
+        from app.routes.business import _advance_date
+        assert _advance_date(date(2026, 1, 1), "two_weekly") == date(2026, 1, 15)
+
+    def test_advance_four_weekly(self):
+        from app.routes.business import _advance_date
+        assert _advance_date(date(2026, 1, 1), "four_weekly") == date(2026, 1, 29)
+
+    def test_advance_monthly(self):
+        from app.routes.business import _advance_date
+        assert _advance_date(date(2026, 1, 15), "monthly") == date(2026, 2, 15)
+
+    def test_advance_monthly_clamps_to_month_end(self):
+        """Jan 31 + 1 month = Feb 28 (not 31)."""
+        from app.routes.business import _advance_date
+        assert _advance_date(date(2026, 1, 31), "monthly") == date(2026, 2, 28)
+
+    def test_advance_two_monthly(self):
+        from app.routes.business import _advance_date
+        assert _advance_date(date(2026, 1, 15), "two_monthly") == date(2026, 3, 15)
+
+    def test_advance_quarterly(self):
+        from app.routes.business import _advance_date
+        assert _advance_date(date(2026, 1, 15), "quarterly") == date(2026, 4, 15)
+
+    def test_advance_biannually(self):
+        from app.routes.business import _advance_date
+        assert _advance_date(date(2026, 1, 15), "biannually") == date(2026, 7, 15)
+
+    def test_advance_annually(self):
+        from app.routes.business import _advance_date
+        assert _advance_date(date(2026, 1, 15), "annually") == date(2027, 1, 15)
+
+    def test_advance_two_yearly(self):
+        from app.routes.business import _advance_date
+        assert _advance_date(date(2026, 1, 15), "two_yearly") == date(2028, 1, 15)
+
+    # --- ownership ---
+
+    def test_dismiss_income_ownership(self, client):
+        alice = auth(client, "alice@test.com")
+        bob   = auth(client, "bob@test.com")
+        item_id = client.post(INCOME_URL, json={
+            "amount": 500.0, "date_received": FUTURE, "recurrence_freq": "monthly",
+        }, headers=alice).json()["id"]
+        assert client.post(f"{INCOME_URL}/{item_id}/dismiss", headers=bob).status_code == 404
+
+    def test_dismiss_expense_ownership(self, client):
+        alice = auth(client, "alice@test.com")
+        bob   = auth(client, "bob@test.com")
+        item_id = client.post(EXPENSE_URL, json={
+            "amount": 100.0, "date_incurred": FUTURE, "category": "software",
+            "recurrence_freq": "monthly",
+        }, headers=alice).json()["id"]
+        assert client.post(f"{EXPENSE_URL}/{item_id}/dismiss", headers=bob).status_code == 404
+
+    def test_multiple_approvals_create_multiple_confirmed_transactions(self, client):
+        """Approving twice creates two separate confirmed transactions."""
+        h = auth(client)
+        item_id = client.post(INCOME_URL, json={
+            "amount": 500.0, "date_received": FUTURE, "recurrence_freq": "monthly",
+        }, headers=h).json()["id"]
+
+        past2 = (date.today() - timedelta(days=14)).isoformat()
+        client.post(f"{INCOME_URL}/{item_id}/approve", json={"date_received": PAST}, headers=h)
+        client.post(f"{INCOME_URL}/{item_id}/approve", json={"date_received": past2}, headers=h)
+
+        income_list = client.get(INCOME_URL, headers=h).json()
+        confirmed = [i for i in income_list if i["recurrence_freq"] is None and i["amount"] == pytest.approx(500.0)]
+        assert len(confirmed) == 2

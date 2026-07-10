@@ -1,6 +1,7 @@
-from datetime import date
+import calendar
+from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -26,6 +27,33 @@ from app.schemas import (
 from app.utils import get_owned_or_404
 
 router = APIRouter(prefix="/business", tags=["business"])
+
+_FREQ_DAY_DELTA = {
+    "weekly":      7,
+    "two_weekly":  14,
+    "four_weekly": 28,
+}
+_FREQ_MONTH_DELTA = {
+    "monthly":    1,
+    "two_monthly": 2,
+    "quarterly":  3,
+    "biannually": 6,
+    "annually":   12,
+    "two_yearly": 24,
+}
+
+
+def _advance_date(from_date: date, freq: str) -> date:
+    if freq in _FREQ_DAY_DELTA:
+        return from_date + timedelta(days=_FREQ_DAY_DELTA[freq])
+    if freq in _FREQ_MONTH_DELTA:
+        months = _FREQ_MONTH_DELTA[freq]
+        m = from_date.month + months
+        year = from_date.year + (m - 1) // 12
+        month = (m - 1) % 12 + 1
+        day = min(from_date.day, calendar.monthrange(year, month)[1])
+        return date(year, month, day)
+    raise ValueError(f"Unknown recurrence frequency: {freq!r}")
 
 
 def _tax_year_start() -> date:
@@ -206,15 +234,66 @@ def approve_income(
     current_user: User = Depends(get_current_user),
 ):
     item = get_owned_or_404(db, BusinessIncome, item_id, current_user.id)
-    if body.amount is not None:
-        item.amount = body.amount
-    if body.date_received is not None:
-        item.date_received = body.date_received
-    if item.date_received <= date.today():
-        item.is_approved = True
+
+    if item.recurrence_freq:
+        # Recurring: per-occurrence edits apply only to the confirmed transaction.
+        original_date    = item.date_received
+        occurrence_date  = body.date_received if body.date_received is not None else item.date_received
+        occurrence_amount = body.amount if body.amount is not None else item.amount
+
+        if occurrence_date <= date.today():
+            # Create a one-off confirmed transaction for this occurrence.
+            confirmed = BusinessIncome(
+                user_id=item.user_id,
+                amount=occurrence_amount,
+                date_received=occurrence_date,
+                description=item.description,
+                is_active=True,
+                is_approved=True,
+                recurrence_freq=None,
+                recurrence_end_date=None,
+            )
+            db.add(confirmed)
+            # Roll the recurring entry forward from the original date.
+            next_date = _advance_date(original_date, item.recurrence_freq)
+            if item.recurrence_end_date and next_date > item.recurrence_end_date:
+                item.is_active = False
+            else:
+                item.date_received = next_date
+        else:
+            # Future date: reschedule this occurrence; don't confirm.
+            item.date_received = occurrence_date
+    else:
+        # Non-recurring: existing approval logic.
+        if body.amount is not None:
+            item.amount = body.amount
+        if body.date_received is not None:
+            item.date_received = body.date_received
+        if item.date_received <= date.today():
+            item.is_approved = True
+
     db.commit()
     db.refresh(item)
     return item
+
+
+@router.post("/income/{item_id}/dismiss", status_code=status.HTTP_204_NO_CONTENT)
+def dismiss_income(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = get_owned_or_404(db, BusinessIncome, item_id, current_user.id)
+    if item.recurrence_freq:
+        # Skip this occurrence: roll forward without creating a transaction.
+        next_date = _advance_date(item.date_received, item.recurrence_freq)
+        if item.recurrence_end_date and next_date > item.recurrence_end_date:
+            item.is_active = False
+        else:
+            item.date_received = next_date
+    else:
+        item.is_active = False
+    db.commit()
 
 
 @router.delete("/income/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -289,15 +368,67 @@ def approve_expense(
     current_user: User = Depends(get_current_user),
 ):
     item = get_owned_or_404(db, BusinessExpense, item_id, current_user.id)
-    if body.amount is not None:
-        item.amount = body.amount
-    if body.date_incurred is not None:
-        item.date_incurred = body.date_incurred
-    if item.date_incurred <= date.today():
-        item.is_approved = True
+
+    if item.recurrence_freq:
+        original_date     = item.date_incurred
+        occurrence_date   = body.date_incurred if body.date_incurred is not None else item.date_incurred
+        occurrence_amount = body.amount if body.amount is not None else item.amount
+
+        if occurrence_date <= date.today():
+            confirmed = BusinessExpense(
+                user_id=item.user_id,
+                amount=occurrence_amount,
+                date_incurred=occurrence_date,
+                category=item.category,
+                description=item.description,
+                is_allowable=item.is_allowable,
+                is_active=True,
+                is_approved=True,
+                business_use_percent=item.business_use_percent,
+                expense_method=item.expense_method,
+                home_office_hours_band=item.home_office_hours_band,
+                business_miles=item.business_miles,
+                vehicle_type=item.vehicle_type,
+                recurrence_freq=None,
+                recurrence_end_date=None,
+            )
+            db.add(confirmed)
+            next_date = _advance_date(original_date, item.recurrence_freq)
+            if item.recurrence_end_date and next_date > item.recurrence_end_date:
+                item.is_active = False
+            else:
+                item.date_incurred = next_date
+        else:
+            item.date_incurred = occurrence_date
+    else:
+        if body.amount is not None:
+            item.amount = body.amount
+        if body.date_incurred is not None:
+            item.date_incurred = body.date_incurred
+        if item.date_incurred <= date.today():
+            item.is_approved = True
+
     db.commit()
     db.refresh(item)
     return item
+
+
+@router.post("/expenses/{item_id}/dismiss", status_code=status.HTTP_204_NO_CONTENT)
+def dismiss_expense(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = get_owned_or_404(db, BusinessExpense, item_id, current_user.id)
+    if item.recurrence_freq:
+        next_date = _advance_date(item.date_incurred, item.recurrence_freq)
+        if item.recurrence_end_date and next_date > item.recurrence_end_date:
+            item.is_active = False
+        else:
+            item.date_incurred = next_date
+    else:
+        item.is_active = False
+    db.commit()
 
 
 @router.delete("/expenses/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
