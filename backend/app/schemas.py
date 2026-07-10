@@ -441,6 +441,7 @@ class BusinessSummaryOut(BaseModel):
     has_business_data: bool
     total_business_miles: int
     total_mileage_allowance: float
+    home_office_allowance: float = 0.0
     mileage_crossover_msg: str | None
     mileage_attribution: dict[int, float] = {}  # entry_id → attributed allowance
     tax_estimate: SoleTraderTaxOut | None = None

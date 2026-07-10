@@ -563,6 +563,96 @@ class TestHomeOfficeFlatRate:
         assert body["allowable_expenses_ytd"] == pytest.approx(18.0)   # 51_100 band from seeded config
         assert body["total_expenses_ytd"]     == pytest.approx(0.0)
 
+    def test_summary_returns_home_office_allowance_field(self, client, db):
+        """home_office_allowance in the summary equals the sum of all flat-rate entries."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
+        # 25_50 (£10) + 101_plus (£26) = £36
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "home_office",
+            "is_allowable": True, "expense_method": "home_office_flat",
+            "home_office_hours_band": "25_50",
+        }, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "home_office",
+            "is_allowable": True, "expense_method": "home_office_flat",
+            "home_office_hours_band": "101_plus",
+        }, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["home_office_allowance"] == pytest.approx(36.0)
+        # Non-flat-rate expense types must not inflate home_office_allowance
+        assert body["total_expenses_ytd"]    == pytest.approx(0.0)
+
+    def test_home_office_allowance_zero_without_flat_rate_entries(self, client, db):
+        """home_office_allowance is 0 when there are no flat-rate entries."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 2000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={"amount": 300.0, "date_incurred": d, "category": "software"}, headers=h)
+        _post_mileage(client, h, d, 100, "car_van")
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["home_office_allowance"] == pytest.approx(0.0)
+
+    def test_allowable_breakdown_three_components_reconcile(self, client, db):
+        """cash allowable + mileage allowance + HO allowance == allowable_expenses_ytd exactly.
+        Dataset uses all three component types to prove full reconciliation."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 10000.0, "date_received": d}, headers=h)
+        # Cash allowable expense (£200)
+        client.post(EXPENSE_URL, json={"amount": 200.0, "date_incurred": d, "category": "software", "is_allowable": True}, headers=h)
+        # HO flat rate 51_100 = £18
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "home_office",
+            "is_allowable": True, "expense_method": "home_office_flat",
+            "home_office_hours_band": "51_100",
+        }, headers=h)
+        # 200 car/van miles = 200 × 0.55 = £110
+        _post_mileage(client, h, d, 200, "car_van")
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        ytd     = body["allowable_expenses_ytd"]
+        mileage = body["total_mileage_allowance"]
+        ho      = body["home_office_allowance"]
+        cash    = round(ytd - mileage - ho, 2)
+
+        assert ytd     == pytest.approx(328.0)   # 200 + 18 + 110
+        assert mileage == pytest.approx(110.0)
+        assert ho      == pytest.approx(18.0)
+        assert cash    == pytest.approx(200.0)
+        assert cash + mileage + ho == pytest.approx(ytd)
+
+    def test_cash_component_excludes_mileage_and_ho_flat(self, client, db):
+        """The computed cash component (ytd − mileage − ho) contains only the
+        cash-spent allowable portion — not the two allowance types."""
+        seed_biz_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={"amount": 150.0, "date_incurred": d, "category": "software", "is_allowable": True}, headers=h)
+        # Non-allowable cash expense (excluded from allowable, so cash component = only £150)
+        client.post(EXPENSE_URL, json={"amount": 50.0, "date_incurred": d, "category": "client_entertainment", "is_allowable": False}, headers=h)
+        client.post(EXPENSE_URL, json={
+            "amount": 0, "date_incurred": d, "category": "home_office",
+            "is_allowable": True, "expense_method": "home_office_flat",
+            "home_office_hours_band": "101_plus",
+        }, headers=h)
+        _post_mileage(client, h, d, 100, "car_van")
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        ytd  = body["allowable_expenses_ytd"]
+        cash = round(ytd - body["total_mileage_allowance"] - body["home_office_allowance"], 2)
+
+        # cash component = only the allowable cash expense (£150); non-allowable excluded
+        assert cash == pytest.approx(150.0)
+        assert body["total_expenses_ytd"] == pytest.approx(200.0)  # cash total includes non-allowable
+
 
 # ---------------------------------------------------------------------------
 # Percentage (partial business use)

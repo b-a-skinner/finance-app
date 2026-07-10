@@ -420,15 +420,18 @@ def get_business_summary(
         mileage_attribution: dict[int, float] = {}
         crossover_msg      = None
 
-    cash_expenses  = 0.0
-    allowable_cash = 0.0
+    cash_expenses     = 0.0
+    allowable_cash    = 0.0
+    home_office_allow = 0.0
 
     for e in other_expenses:
         method = e.expense_method
 
         if method == "home_office_flat":
             if cfg:
-                allowable_cash += _home_office_flat_rate(e.home_office_hours_band, cfg)
+                rate = _home_office_flat_rate(e.home_office_hours_band, cfg)
+                allowable_cash    += rate
+                home_office_allow += rate
 
         elif method in ("home_office_actual", "percentage"):
             cash_expenses += e.amount
@@ -445,6 +448,7 @@ def get_business_summary(
     allowable_expenses_ytd = round(allowable_cash + mileage_allowance, 2)
     total_expenses_ytd     = round(cash_expenses, 2)
     taxable_profit         = round(revenue - allowable_expenses_ytd, 2)
+    home_office_allowance  = round(home_office_allow, 2)
 
     # Sole trader tax estimate — requires both configs and Class 4 fields seeded
     tax_estimate: SoleTraderTaxOut | None = None
@@ -461,6 +465,7 @@ def get_business_summary(
         has_business_data=any_income is not None or any_expense is not None,
         total_business_miles=total_miles,
         total_mileage_allowance=mileage_allowance,
+        home_office_allowance=home_office_allowance,
         mileage_crossover_msg=crossover_msg,
         mileage_attribution=mileage_attribution,
         tax_estimate=tax_estimate,
