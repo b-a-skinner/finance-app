@@ -112,8 +112,8 @@ export default function Business() {
 
         {actionError && <div className="error-banner">{actionError}</div>}
 
-        {/* Summary — 3 cards */}
-        <div className="cards-grid business-summary-grid">
+        {/* All 6 summary cards — 3×2 desktop, 2×3 mobile */}
+        <div className="biz-cards-grid">
           <div className="card">
             <p className="card-title">Revenue this year</p>
             <p className="business-metric">{gbp(summary.revenue_ytd)}</p>
@@ -158,10 +158,6 @@ export default function Business() {
               );
             })()}
           </div>
-        </div>
-
-        {/* Profit split — 2 cards */}
-        <div className="biz-profit-grid">
           <div className="card">
             <p className="card-title">Money left after all costs</p>
             <p className={`business-metric ${cashClass}`}>{gbp(summary.cash_profit)}</p>
@@ -175,59 +171,57 @@ export default function Business() {
             <p className={`business-metric ${taxableClass}`}>{gbp(summary.taxable_profit)}</p>
             <p className="biz-metric-sub">Revenue minus allowable expenses</p>
           </div>
-        </div>
-
-        {/* Tax estimate hero */}
-        {summary.tax_estimate && summary.tax_estimate.taxable_profit > 0 && (
-          <div className="card biz-tax-hero">
-            <p className="card-title">
-              Set aside for your tax bill
-              <Tip text="Income tax + Class 4 NI on your taxable profit. Class 2 NI is shown separately — it's either automatic or voluntary." />
-            </p>
-            <p className="biz-tax-hero-amount">{gbp(summary.tax_estimate.total_set_aside)}</p>
-            <p className="biz-metric-sub">
-              {(summary.tax_estimate.effective_rate * 100).toFixed(1)}% effective rate on{' '}
-              {gbp(summary.tax_estimate.taxable_profit)} taxable profit
-            </p>
-            <details className="biz-tax-breakdown">
-              <summary>Show breakdown</summary>
-              <ul className="biz-tax-breakdown-list">
-                <li>
-                  <span className="breakdown-label">Income tax</span>
-                  <span>{gbp(summary.tax_estimate.income_tax_on_profit)}</span>
-                </li>
-                <li>
-                  <span className="breakdown-label">Class 4 NI</span>
-                  <span>{gbp(summary.tax_estimate.class4_ni)}</span>
-                </li>
-                <li className="breakdown-class2">
-                  <span className="breakdown-label">Class 2 NI</span>
-                  <p className="biz-class2-snippet">
-                    {class2EducationSnippet(summary.tax_estimate.class2_status, taxConfig)}
-                  </p>
-                  <details className="biz-class2-explainer">
-                    <summary>What does this mean for my State Pension?</summary>
-                    <p>
-                      {CLASS2_PENSION_EXPLAINER.split('gov.uk/check-state-pension')[0]}
-                      <a
-                        href="https://www.gov.uk/check-state-pension"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        gov.uk/check-state-pension
-                      </a>
-                      {CLASS2_PENSION_EXPLAINER.split('gov.uk/check-state-pension')[1]}
+          {summary.tax_estimate && summary.tax_estimate.taxable_profit > 0 && (
+            <div className="card biz-tax-hero">
+              <p className="card-title">
+                Set aside for your tax bill
+                <Tip text="Income tax + Class 4 NI on your taxable profit. Class 2 NI is shown separately — it's either automatic or voluntary." />
+              </p>
+              <p className="biz-tax-hero-amount">{gbp(summary.tax_estimate.total_set_aside)}</p>
+              <p className="biz-metric-sub">
+                {(summary.tax_estimate.effective_rate * 100).toFixed(1)}% effective rate on{' '}
+                {gbp(summary.tax_estimate.taxable_profit)} taxable profit
+              </p>
+              <details className="biz-tax-breakdown">
+                <summary>Show breakdown</summary>
+                <ul className="biz-tax-breakdown-list">
+                  <li>
+                    <span className="breakdown-label">Income tax</span>
+                    <span>{gbp(summary.tax_estimate.income_tax_on_profit)}</span>
+                  </li>
+                  <li>
+                    <span className="breakdown-label">Class 4 NI</span>
+                    <span>{gbp(summary.tax_estimate.class4_ni)}</span>
+                  </li>
+                  <li className="breakdown-class2">
+                    <span className="breakdown-label">Class 2 NI</span>
+                    <p className="biz-class2-snippet">
+                      {class2EducationSnippet(summary.tax_estimate.class2_status, taxConfig)}
                     </p>
-                  </details>
-                </li>
-              </ul>
-            </details>
-            <p className="biz-tax-hero-disclaimer">
-              This figure assumes self-employment income only and doesn&rsquo;t account for other income
-              you may have. This is a calculation tool, not tax advice.
-            </p>
-          </div>
-        )}
+                    <details className="biz-class2-explainer">
+                      <summary>What does this mean for my State Pension?</summary>
+                      <p>
+                        {CLASS2_PENSION_EXPLAINER.split('gov.uk/check-state-pension')[0]}
+                        <a
+                          href="https://www.gov.uk/check-state-pension"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          gov.uk/check-state-pension
+                        </a>
+                        {CLASS2_PENSION_EXPLAINER.split('gov.uk/check-state-pension')[1]}
+                      </p>
+                    </details>
+                  </li>
+                </ul>
+              </details>
+              <p className="biz-tax-hero-disclaimer">
+                This figure assumes self-employment income only and doesn&rsquo;t account for other income
+                you may have. This is a calculation tool, not tax advice.
+              </p>
+            </div>
+          )}
+        </div>
 
 
 
