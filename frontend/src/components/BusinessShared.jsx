@@ -210,7 +210,7 @@ export function ModalShell({ title, onClose, children }) {
 // Income modal
 // ---------------------------------------------------------------------------
 
-export function IncomeModal({ onClose, onSuccess, item }) {
+export function IncomeModal({ onClose, onSuccess, item, onDelete }) {
   const { apiFetch } = useAuth();
   // Show recurrence controls only when creating a new entry or editing the rolling Upcoming entry
   // (is_approved=false). Confirmed/past transactions are one-off and must not expose recurrence UI.
@@ -226,6 +226,10 @@ export function IncomeModal({ onClose, onSuccess, item }) {
   const [error, setError]   = useState('');
 
   function field(k, v) { setForm(p => ({ ...p, [k]: v })); }
+
+  function handleDelete() {
+    if (window.confirm('Delete this entry? This cannot be undone.')) onDelete();
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -286,6 +290,11 @@ export function IncomeModal({ onClose, onSuccess, item }) {
           <input id="bi-desc" type="text" value={form.description} onChange={e => field('description', e.target.value)} placeholder="e.g. Invoice payment, day's takings" />
         </div>
         <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : item ? 'Save changes' : 'Add income'}</button>
+        {item && onDelete && (
+          <div className="modal-danger-zone">
+            <button type="button" className="btn-sm btn-danger" onClick={handleDelete} disabled={saving}>Delete entry</button>
+          </div>
+        )}
       </form>
     </ModalShell>
   );
@@ -295,7 +304,7 @@ export function IncomeModal({ onClose, onSuccess, item }) {
 // Expense modal
 // ---------------------------------------------------------------------------
 
-export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
+export function ExpenseModal({ onClose, onSuccess, item, taxConfig, onDelete }) {
   const { apiFetch } = useAuth();
   const showRecurrenceControls = !item || item.is_approved === false;
 
@@ -324,6 +333,10 @@ export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
   const [error, setError]   = useState('');
 
   function field(k, v) { setForm(p => ({ ...p, [k]: v })); }
+
+  function handleDelete() {
+    if (window.confirm('Delete this entry? This cannot be undone.')) onDelete();
+  }
 
   function handleCategoryChange(cat) {
     setForm(p => ({
@@ -632,6 +645,11 @@ export function ExpenseModal({ onClose, onSuccess, item, taxConfig }) {
         <button type="submit" className="btn-primary" disabled={saving}>
           {saving ? 'Saving…' : item ? 'Save changes' : isMileage ? 'Log miles' : isFlatRate ? 'Add home office month' : 'Add expense'}
         </button>
+        {item && onDelete && (
+          <div className="modal-danger-zone">
+            <button type="button" className="btn-sm btn-danger" onClick={handleDelete} disabled={saving}>Delete entry</button>
+          </div>
+        )}
       </form>
     </ModalShell>
   );

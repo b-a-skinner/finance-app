@@ -84,6 +84,24 @@ describe('RECURRENCE_OPTIONS', () => {
   });
 });
 
+describe('.modal-danger-zone CSS', () => {
+  const css = readFileSync(resolve(__dirname, '../index.css'), 'utf-8');
+  const match = css.match(/\.modal-danger-zone\s*\{([^}]+)\}/);
+  const block = match ? match[1] : '';
+
+  it('CSS block is found', () => {
+    expect(block).not.toBe('');
+  });
+
+  it('has a top border to visually separate from the save button', () => {
+    expect(block).toMatch(/border-top/);
+  });
+
+  it('has top margin for spacing', () => {
+    expect(block).toMatch(/margin-top/);
+  });
+});
+
 describe('RECURRENCE_LABELS', () => {
   it('maps all non-empty frequency values to their display labels', () => {
     expect(RECURRENCE_LABELS['weekly']).toBe('Weekly');

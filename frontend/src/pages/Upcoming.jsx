@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import { useAuth } from '../context/AuthContext';
 import { gbp } from '../utils/format';
-import { CATEGORY_INFO, VEHICLE_LABELS, RECURRENCE_LABELS, formatDate, today, fmtMiles } from '../components/BusinessShared';
+import {
+  CATEGORY_INFO, VEHICLE_LABELS, RECURRENCE_LABELS, formatDate, today, fmtMiles,
+  homeOfficeFlatAllowance, IncomeModal, ExpenseModal,
+} from '../components/BusinessShared';
 
 function entryLabel(entry) {
   if (entry._type === 'income') return entry.description || 'Income';
@@ -15,9 +18,13 @@ function entryLabel(entry) {
   return CATEGORY_INFO[entry.category]?.label ?? entry.category;
 }
 
-function entryAmount(entry) {
-  if (entry.expense_method === 'mileage') return `${fmtMiles(entry.business_miles)} miles`;
-  return gbp(entry.amount);
+function entryDetail(entry) {
+  let detail = formatDate(entry._date);
+  if (entry.recurrence_freq) {
+    detail += ` · Recurring ${RECURRENCE_LABELS[entry.recurrence_freq]}`;
+    if (entry.recurrence_end_date) detail += `, until ${formatDate(entry.recurrence_end_date)}`;
+  }
+  return detail;
 }
 
 function ApprovalItem({ entry, apiFetch, onRefresh }) {
@@ -116,36 +123,31 @@ function ApprovalItem({ entry, apiFetch, onRefresh }) {
   );
 }
 
-function ScheduledItem({ entry, apiFetch, onRefresh }) {
-  const isIncome = entry._type === 'income';
-  const [removing, setRemoving] = useState(false);
-
-  async function handleRemove() {
-    setRemoving(true);
-    const url = isIncome ? `/api/business/income/${entry.id}` : `/api/business/expenses/${entry.id}`;
-    await apiFetch(url, { method: 'DELETE' });
-    onRefresh();
-  }
+function ScheduledItem({ entry, onEdit, taxConfig }) {
+  const isIncome  = entry._type === 'income';
+  const isMileage = !isIncome && entry.expense_method === 'mileage';
+  const isFlatHO  = !isIncome && entry.expense_method === 'home_office_flat';
+  const flatAmt   = isFlatHO ? homeOfficeFlatAllowance(entry.home_office_hours_band, taxConfig) : null;
 
   return (
-    <div className="scheduled-item">
-      <div className="scheduled-item-body">
-        <div className="scheduled-item-main">
-          <span className="scheduled-item-label">{entryLabel(entry)}</span>
-          <span className="scheduled-item-date">{formatDate(entry._date)}</span>
-          <span className="scheduled-item-amount">{entryAmount(entry)}</span>
-        </div>
-        {entry.recurrence_freq && (
-          <p className="recurrence-badge">
-            Recurring {RECURRENCE_LABELS[entry.recurrence_freq]}
-            {entry.recurrence_end_date ? `, until ${formatDate(entry.recurrence_end_date)}` : ''}
-          </p>
-        )}
+    <li className="item-row">
+      <div className="item-info">
+        <span className="item-name">{entryLabel(entry)}</span>
+        <span className="item-detail">{entryDetail(entry)}</span>
       </div>
-      <button className="scheduled-item-remove" onClick={handleRemove} disabled={removing} aria-label="Remove">
-        ×
-      </button>
-    </div>
+      {isIncome ? (
+        <span className="business-amount business-amount--income">+{gbp(entry.amount)}</span>
+      ) : isMileage ? (
+        <span className="business-amount">{fmtMiles(entry.business_miles)} mi</span>
+      ) : isFlatHO && flatAmt != null ? (
+        <span className="business-amount business-amount--expense">−{gbp(flatAmt)}</span>
+      ) : isFlatHO ? null : (
+        <span className="business-amount business-amount--expense">−{gbp(entry.amount)}</span>
+      )}
+      <div className="item-actions">
+        <button className="btn-sm" onClick={onEdit}>Edit</button>
+      </div>
+    </li>
   );
 }
 
@@ -160,18 +162,35 @@ export default function Upcoming() {
   const [loading, setLoading]   = useState(true);
   const [income, setIncome]     = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [taxConfig, setTaxConfig] = useState(null);
+  const [modal, setModal]       = useState(null);
+  const [editItem, setEditItem] = useState(null);
 
   const fetchUpcoming = useCallback(async () => {
-    const res = await apiFetch('/api/business/upcoming');
-    if (res.ok) {
-      const data = await res.json();
+    const [upRes, cfgRes] = await Promise.all([
+      apiFetch('/api/business/upcoming'),
+      apiFetch('/api/business/tax-config'),
+    ]);
+    if (upRes.ok) {
+      const data = await upRes.json();
       setIncome(data.income);
       setExpenses(data.expenses);
     }
+    if (cfgRes.ok) setTaxConfig(await cfgRes.json());
     setLoading(false);
   }, [apiFetch]);
 
   useEffect(() => { fetchUpcoming(); }, [fetchUpcoming]);
+
+  function closeModal() { setModal(null); setEditItem(null); }
+  function handleSuccess() { closeModal(); fetchUpcoming(); }
+
+  async function handleDeleteScheduled(type, id) {
+    const url = type === 'income' ? `/api/business/income/${id}` : `/api/business/expenses/${id}`;
+    await apiFetch(url, { method: 'DELETE' });
+    closeModal();
+    fetchUpcoming();
+  }
 
   if (loading) {
     return (
@@ -232,19 +251,39 @@ export default function Upcoming() {
           <section className="upcoming-section">
             <h2 className="upcoming-section-title">Scheduled</h2>
             <p className="upcoming-section-sub">These are forecasts — they'll move to "To approve" once their date passes.</p>
-            <div className="scheduled-list">
-              {scheduled.map(entry => (
-                <ScheduledItem
-                  key={`${entry._type}-${entry.id}`}
-                  entry={entry}
-                  apiFetch={apiFetch}
-                  onRefresh={fetchUpcoming}
-                />
-              ))}
+            <div className="card">
+              <ul className="item-list">
+                {scheduled.map(entry => (
+                  <ScheduledItem
+                    key={`${entry._type}-${entry.id}`}
+                    entry={entry}
+                    taxConfig={taxConfig}
+                    onEdit={() => { setEditItem({ type: entry._type, item: entry }); setModal(entry._type); }}
+                  />
+                ))}
+              </ul>
             </div>
           </section>
         )}
       </main>
+
+      {modal === 'income' && (
+        <IncomeModal
+          onClose={closeModal}
+          onSuccess={handleSuccess}
+          item={editItem?.item}
+          onDelete={() => handleDeleteScheduled(editItem.type, editItem.item.id)}
+        />
+      )}
+      {modal === 'expense' && (
+        <ExpenseModal
+          onClose={closeModal}
+          onSuccess={handleSuccess}
+          item={editItem?.item}
+          taxConfig={taxConfig}
+          onDelete={() => handleDeleteScheduled(editItem.type, editItem.item.id)}
+        />
+      )}
     </>
   );
 }

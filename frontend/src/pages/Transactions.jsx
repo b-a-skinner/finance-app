@@ -117,7 +117,6 @@ export default function Transactions() {
                     )}
                     <div className="item-actions">
                       <button className="btn-sm" onClick={() => startEdit(entry._type, entry)}>Edit</button>
-                      <button className="btn-sm btn-danger" onClick={() => handleDelete(entry._type, entry.id)}>Delete</button>
                     </div>
                   </li>
                 );
@@ -131,12 +130,14 @@ export default function Transactions() {
 
       {modal === 'income' && (
         <IncomeModal onClose={closeModal} onSuccess={handleSuccess}
-          item={editItem?.type === 'income' ? editItem.item : null} />
+          item={editItem?.type === 'income' ? editItem.item : null}
+          onDelete={editItem?.type === 'income' ? () => { handleDelete('income', editItem.item.id); closeModal(); } : undefined} />
       )}
       {modal === 'expense' && (
         <ExpenseModal onClose={closeModal} onSuccess={handleSuccess}
           item={editItem?.type === 'expense' ? editItem.item : null}
-          taxConfig={taxConfig} />
+          taxConfig={taxConfig}
+          onDelete={editItem?.type === 'expense' ? () => { handleDelete('expense', editItem.item.id); closeModal(); } : undefined} />
       )}
     </>
   );
