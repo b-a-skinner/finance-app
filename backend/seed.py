@@ -44,6 +44,30 @@ def seed() -> None:
             db.commit()
             print("Seeded TaxYearConfig and 5 StudentLoanPlanConfig rows for 2026/27.")
 
+        if not db.query(TaxYearConfig).filter_by(tax_year="2025/26").first():
+            db.add(TaxYearConfig(
+                tax_year="2025/26",
+                # Income tax — frozen since 2021/22, unchanged through 2025/26 into 2026/27
+                personal_allowance=12570,
+                basic_rate_threshold=50270,
+                basic_rate_pct=20,
+                higher_rate_threshold=125140,
+                higher_rate_pct=40,
+                additional_rate_pct=45,
+                # National Insurance (weekly thresholds × 52)
+                ni_primary_threshold=12584,   # £242/week
+                ni_upper_threshold=50284,     # £967/week
+                ni_main_rate_pct=8,
+                ni_upper_rate_pct=2,
+                # Auto-enrolment pension qualifying earnings
+                pension_qualifying_lower=6240,
+                pension_qualifying_upper=50270,
+                pension_min_total_pct=8,
+                pension_min_employer_pct=3,
+            ))
+            db.commit()
+            print("Seeded TaxYearConfig for 2025/26.")
+
         # Seed age benchmarks (idempotent: skip if already present)
         if not db.query(AgeBenchmarkSalary).first():
             _SAL = "ONS, May 2026"
@@ -103,6 +127,33 @@ def seed() -> None:
             biz_cfg.class2_weekly_rate = 3.65
             db.commit()
             print("Updated BusinessTaxConfig with Class 4/2 NI rates for 2026/27.")
+
+        if not db.query(BusinessTaxConfig).filter_by(tax_year="2025/26").first():
+            db.add(BusinessTaxConfig(
+                tax_year="2025/26",
+                # Home office flat rates — £/month (HMRC simplified expenses, unchanged from 2026/27)
+                home_office_band_25_50=10.0,
+                home_office_band_51_100=18.0,
+                home_office_band_101_plus=26.0,
+                # Mileage rates — 45p/mile for the first 10,000 car/van miles; the rise to
+                # 55p took effect 6 April 2026 and applies to 2026/27 only, not 2025/26.
+                mileage_car_van_first=0.45,
+                mileage_car_van_over=0.25,
+                mileage_motorcycle=0.24,
+                mileage_bicycle=0.20,
+                mileage_threshold=10000,
+                # Class 4 NI (2025/26 HMRC, unchanged from 2026/27)
+                class4_lower_limit=12570,
+                class4_upper_limit=50270,
+                class4_main_rate=0.06,
+                class4_upper_rate=0.02,
+                # Class 2 NI (2025/26 HMRC)
+                class2_small_profits_threshold=6845,
+                class2_weekly_rate=3.50,
+                source_note="HMRC simplified expenses, AMAP and NIC rates, 2025/26",
+            ))
+            db.commit()
+            print("Seeded BusinessTaxConfig for 2025/26.")
 
         if not db.query(RegionalSalaryBenchmark).first():
             _R = "ONS ASHE, April 2025, released October 2025"

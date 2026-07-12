@@ -944,6 +944,168 @@ class TestTaxYearSelector:
         r = client.get(TAX_CFG_URL, params={"tax_year": _prior_tax_year_label()}, headers=h)
         assert r.status_code == 404
 
+    def test_arbitrary_year_works_as_pure_data_insert(self, client, db):
+        """Proves the tax-year machinery is generic — an arbitrary year (not one of
+        the two literal years used elsewhere in this file) needs only a seeded config
+        row, no code change, to work correctly."""
+        seed_biz_config_for(db, "2020/21", mileage_car_van_first=0.45, mileage_car_van_over=0.25, mileage_threshold=10000)
+        h = auth(client)
+        _post_mileage(client, h, "2020-06-15", 1000, "car_van")
+
+        body = client.get(SUMMARY_URL, params={"tax_year": "2020/21"}, headers=h).json()
+        assert body["tax_config_available"] is True
+        assert body["total_mileage_allowance"] == pytest.approx(450.0)
+
+
+# ---------------------------------------------------------------------------
+# Real HMRC-seeded rates: 2025/26 vs 2026/27
+# Mileage rose 45p → 55p and Class 2 threshold/rate rose, both effective 6 April 2026.
+# ---------------------------------------------------------------------------
+
+class TestSeededHmrcRates2025_26:
+    def test_mileage_45p_for_2025_26_vs_55p_for_2026_27(self, client, db):
+        seed_biz_config_for(db, "2025/26", mileage_car_van_first=0.45, mileage_car_van_over=0.25, mileage_threshold=10000)
+        seed_biz_config_for(db, "2026/27", mileage_car_van_first=0.55, mileage_car_van_over=0.25, mileage_threshold=10000)
+        h = auth(client)
+
+        _post_mileage(client, h, "2025-06-15", 1000, "car_van")
+        _post_mileage(client, h, "2026-06-15", 1000, "car_van")
+
+        body_2025 = client.get(SUMMARY_URL, params={"tax_year": "2025/26"}, headers=h).json()
+        body_2026 = client.get(SUMMARY_URL, params={"tax_year": "2026/27"}, headers=h).json()
+        assert body_2025["total_mileage_allowance"] == pytest.approx(450.0)
+        assert body_2026["total_mileage_allowance"] == pytest.approx(550.0)
+
+    def test_class2_threshold_and_rate_differ_by_year(self, client, db):
+        seed_biz_config_for(db, "2025/26", class4_lower_limit=12570, class4_upper_limit=50270,
+                             class4_main_rate=0.06, class4_upper_rate=0.02,
+                             class2_small_profits_threshold=6845, class2_weekly_rate=3.50)
+        seed_biz_config_for(db, "2026/27", class4_lower_limit=12570, class4_upper_limit=50270,
+                             class4_main_rate=0.06, class4_upper_rate=0.02,
+                             class2_small_profits_threshold=7105, class2_weekly_rate=3.65)
+        seed_tax_year_config_for(db, "2025/26")
+        seed_tax_year_config_for(db, "2026/27")
+        h = auth(client)
+
+        # Profit sits between the two years' Class 2 thresholds (£6,845 vs £7,105) but
+        # below the Class 4 lower limit (£12,570): 2025/26 is "covered_no_class4"
+        # (>= its own £6,845 threshold) while 2026/27 is "below_threshold" (< its own
+        # £7,105) — proving each year checks its OWN Class 2 threshold.
+        profit = 7000.0
+        client.post(INCOME_URL, json={"amount": profit, "date_received": "2025-06-15"}, headers=h)
+        client.post(INCOME_URL, json={"amount": profit, "date_received": "2026-06-15"}, headers=h)
+
+        body_2025 = client.get(SUMMARY_URL, params={"tax_year": "2025/26"}, headers=h).json()
+        body_2026 = client.get(SUMMARY_URL, params={"tax_year": "2026/27"}, headers=h).json()
+        assert body_2025["tax_estimate"]["class2_status"] == "covered_no_class4"
+        assert body_2026["tax_estimate"]["class2_status"] == "below_threshold"
+        assert body_2026["tax_estimate"]["class2_voluntary_note"] is not None
+        assert "£3.65" in body_2026["tax_estimate"]["class2_voluntary_note"]
+
+    def test_class4_ni_2025_26_uses_6pct_2pct_at_correct_limits(self, client, db):
+        seed_biz_config_for(db, "2025/26", class4_lower_limit=12570, class4_upper_limit=50270,
+                             class4_main_rate=0.06, class4_upper_rate=0.02,
+                             class2_small_profits_threshold=6845, class2_weekly_rate=3.50)
+        seed_tax_year_config_for(db, "2025/26")
+        h = auth(client)
+        client.post(INCOME_URL, json={"amount": 60270.0, "date_received": "2025-06-15"}, headers=h)
+
+        body = client.get(SUMMARY_URL, params={"tax_year": "2025/26"}, headers=h).json()
+        assert body["taxable_profit"] == pytest.approx(60270.0)
+        expected_class4 = round((50270 - 12570) * 0.06 + (60270 - 50270) * 0.02, 2)
+        assert body["tax_estimate"]["class4_ni"] == pytest.approx(expected_class4)
+
+    def test_2025_26_selection_has_no_missing_config_banner_condition(self, client, db):
+        seed_biz_config_for(db, "2025/26", class2_small_profits_threshold=6845, class2_weekly_rate=3.50)
+        seed_tax_year_config_for(db, "2025/26")
+        h = auth(client)
+        body = client.get(SUMMARY_URL, params={"tax_year": "2025/26"}, headers=h).json()
+        assert body["tax_config_available"] is True
+
+
+class TestSeedScriptSeeds2025_26AsData:
+    """Runs the actual backend/seed.py script against an isolated in-memory DB and
+    checks the row it inserts — proves the 2025/26 rates are a data insert in
+    seed.py, not values duplicated/hardcoded only inside this test file."""
+
+    def test_seed_py_inserts_2025_26_business_tax_config_with_exact_hmrc_values(self, monkeypatch):
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import StaticPool
+        import seed as seed_module
+
+        engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+        Session = sessionmaker(bind=engine)
+        from app.database import Base
+        Base.metadata.create_all(bind=engine)
+        monkeypatch.setattr(seed_module, "SessionLocal", Session)
+
+        seed_module.seed()
+
+        check = Session()
+        try:
+            cfg = check.query(BusinessTaxConfig).filter_by(tax_year="2025/26").first()
+            assert cfg is not None
+            assert cfg.mileage_car_van_first == pytest.approx(0.45)
+            assert cfg.mileage_car_van_over == pytest.approx(0.25)
+            assert cfg.mileage_motorcycle == pytest.approx(0.24)
+            assert cfg.mileage_bicycle == pytest.approx(0.20)
+            assert cfg.mileage_threshold == 10000
+            assert cfg.home_office_band_25_50 == pytest.approx(10.0)
+            assert cfg.home_office_band_51_100 == pytest.approx(18.0)
+            assert cfg.home_office_band_101_plus == pytest.approx(26.0)
+            assert cfg.class4_lower_limit == pytest.approx(12570)
+            assert cfg.class4_upper_limit == pytest.approx(50270)
+            assert cfg.class4_main_rate == pytest.approx(0.06)
+            assert cfg.class4_upper_rate == pytest.approx(0.02)
+            assert cfg.class2_small_profits_threshold == pytest.approx(6845)
+            assert cfg.class2_weekly_rate == pytest.approx(3.50)
+            assert cfg.source_note == "HMRC simplified expenses, AMAP and NIC rates, 2025/26"
+
+            # 2026/27 is untouched by the 2025/26 insert.
+            cfg_2026 = check.query(BusinessTaxConfig).filter_by(tax_year="2026/27").first()
+            assert cfg_2026.mileage_car_van_first == pytest.approx(0.55)
+        finally:
+            check.close()
+
+    def test_seed_py_inserts_2025_26_tax_year_config(self, monkeypatch):
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import StaticPool
+        import seed as seed_module
+
+        engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+        Session = sessionmaker(bind=engine)
+        from app.database import Base
+        Base.metadata.create_all(bind=engine)
+        monkeypatch.setattr(seed_module, "SessionLocal", Session)
+
+        seed_module.seed()
+
+        check = Session()
+        try:
+            cfg = check.query(TaxYearConfig).filter_by(tax_year="2025/26").first()
+            assert cfg is not None
+            assert cfg.personal_allowance == pytest.approx(12570)
+            assert cfg.basic_rate_threshold == pytest.approx(50270)
+            assert cfg.basic_rate_pct == pytest.approx(20)
+            assert cfg.higher_rate_threshold == pytest.approx(125140)
+            assert cfg.higher_rate_pct == pytest.approx(40)
+            assert cfg.additional_rate_pct == pytest.approx(45)
+            assert cfg.ni_primary_threshold == pytest.approx(12584)
+            assert cfg.ni_upper_threshold == pytest.approx(50284)
+            assert cfg.ni_main_rate_pct == pytest.approx(8)
+            assert cfg.ni_upper_rate_pct == pytest.approx(2)
+            assert cfg.pension_qualifying_lower == pytest.approx(6240)
+            assert cfg.pension_qualifying_upper == pytest.approx(50270)
+
+            # Identical to the 2026/27 row's income-tax/NI figures (frozen thresholds).
+            cfg_2026 = check.query(TaxYearConfig).filter_by(tax_year="2026/27").first()
+            assert cfg.personal_allowance == cfg_2026.personal_allowance
+            assert cfg.ni_primary_threshold == cfg_2026.ni_primary_threshold
+        finally:
+            check.close()
+
 
 class TestMileageAttribution:
     """Per-entry attribution — all rates and thresholds read from seeded config."""
