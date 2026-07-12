@@ -19,6 +19,8 @@ export const CATEGORY_INFO = {
   phone_internet:       { label: 'Phone & internet',                 allowable: true,  tip: 'Enter the total bill and set your business use % — only that portion is allowable.' },
   pension_employer:     { label: 'Pension contributions (employer)', allowable: true,  tip: 'Employer pension contributions are normally allowable.' },
   bank_charges:         { label: 'Bank & finance charges',           allowable: true,  tip: 'Business bank charges and interest are normally allowable.' },
+  goods_for_resale:     { label: 'Goods bought to sell on (stock & materials)', allowable: true, tip: 'Stock bought for resale and raw materials used to make what you sell — your cost of sales. Normally allowable.' },
+  clothing:             { label: 'Clothing',                         allowable: true,  tip: 'Protective clothing, uniforms, and branded workwear are normally allowable. Everyday clothing usually isn\'t.' },
   client_entertainment: { label: 'Client entertainment',             allowable: false, tip: 'Client entertainment is not tax-deductible under HMRC rules.' },
   fines:                { label: 'Fines & penalties',                allowable: false, tip: 'Fines and penalties are not allowable, even if incurred on business.' },
   personal:             { label: 'Personal expenses / drawings',     allowable: false, tip: 'Personal expenses and drawings don\'t reduce your tax bill.' },
@@ -27,7 +29,7 @@ export const CATEGORY_INFO = {
   other:                { label: 'Other',                            allowable: true,  tip: 'Enter your business use % if this is a dual-purpose expense. Check with your accountant.' },
 };
 
-export const ALLOWABLE_CATS     = ['equipment','software','office','travel','professional_fees','marketing','training','insurance','staff_costs','phone_internet','pension_employer','bank_charges'];
+export const ALLOWABLE_CATS     = ['equipment','software','office','travel','professional_fees','marketing','training','insurance','staff_costs','phone_internet','pension_employer','bank_charges','goods_for_resale','clothing'];
 export const NON_ALLOWABLE_CATS = ['client_entertainment','fines','personal','political'];
 export const DUAL_CATS          = ['home_office','other'];
 

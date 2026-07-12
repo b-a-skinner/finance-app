@@ -207,7 +207,7 @@ class TestBusinessExpenseCRUD:
         h = auth(client)
         for cat in ("insurance", "staff_costs", "phone_internet", "pension_employer",
                     "bank_charges", "client_entertainment", "fines", "personal",
-                    "political", "home_office"):
+                    "political", "home_office", "goods_for_resale", "clothing"):
             r = client.post(EXPENSE_URL, json={"amount": 10.0, "date_incurred": TODAY, "category": cat}, headers=h)
             assert r.status_code == 201, f"Failed for category: {cat}"
 
@@ -336,6 +336,29 @@ class TestBusinessSummary:
         assert body["total_expenses_ytd"]     == pytest.approx(400.0)
         assert body["allowable_expenses_ytd"] == pytest.approx(0.0)
         assert body["taxable_profit"]         == pytest.approx(1000.0)
+
+    def test_new_allowable_category_can_be_overridden_non_allowable(self, client):
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={"amount": 200.0, "date_incurred": d, "category": "goods_for_resale", "is_allowable": False}, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_expenses_ytd"]     == pytest.approx(200.0)
+        assert body["allowable_expenses_ytd"] == pytest.approx(0.0)
+        assert body["taxable_profit"]         == pytest.approx(1000.0)
+
+    def test_new_allowable_categories_flow_into_summary(self, client):
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={"amount": 300.0, "date_incurred": d, "category": "goods_for_resale", "is_allowable": True}, headers=h)
+        client.post(EXPENSE_URL, json={"amount": 150.0, "date_incurred": d, "category": "clothing",         "is_allowable": True}, headers=h)
+
+        body = client.get(SUMMARY_URL, headers=h).json()
+        assert body["total_expenses_ytd"]     == pytest.approx(450.0)
+        assert body["allowable_expenses_ytd"] == pytest.approx(450.0)
+        assert body["taxable_profit"]         == pytest.approx(4550.0)
 
     def test_april_5_falls_in_previous_tax_year(self, client):
         h = auth(client)
