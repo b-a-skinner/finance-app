@@ -1,7 +1,7 @@
 import calendar
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -21,6 +21,7 @@ from app.schemas import (
     BusinessIncomeUpdate,
     BusinessSummaryOut,
     BusinessTaxConfigOut,
+    BusinessTaxYearsOut,
     BusinessUpcomingOut,
     SoleTraderTaxOut,
 )
@@ -136,8 +137,20 @@ def _tax_year_label() -> str:
     return f"{start.year}/{str(start.year + 1)[2:]}"
 
 
-def _get_biz_config(db: Session) -> BusinessTaxConfig | None:
-    return db.query(BusinessTaxConfig).filter_by(tax_year=_tax_year_label()).first()
+def _tax_year_label_for_date(d: date) -> str:
+    """The 'YYYY/YY' tax year label (6 April – 5 April) that a given date falls in."""
+    year = d.year if d >= date(d.year, 4, 6) else d.year - 1
+    return f"{year}/{str(year + 1)[2:]}"
+
+
+def _tax_year_bounds(label: str) -> tuple[date, date]:
+    """Parse a 'YYYY/YY' tax year label into its [6 April, 5 April] date bounds."""
+    start_year = int(label.split("/")[0])
+    return date(start_year, 4, 6), date(start_year + 1, 4, 5)
+
+
+def _get_biz_config(db: Session, tax_year: str) -> BusinessTaxConfig | None:
+    return db.query(BusinessTaxConfig).filter_by(tax_year=tax_year).first()
 
 
 def _home_office_flat_rate(band: str | None, cfg: BusinessTaxConfig) -> float:
@@ -557,14 +570,40 @@ def get_upcoming(
 # Tax config (read-only — seeded, not user-editable)
 # ---------------------------------------------------------------------------
 
-@router.get("/tax-config", response_model=BusinessTaxConfigOut)
-def get_tax_config(
+@router.get("/tax-years", response_model=BusinessTaxYearsOut)
+def list_tax_years(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    cfg = _get_biz_config(db)
+    """Tax years for which the user has at least one confirmed income or expense entry."""
+    income_dates = db.query(BusinessIncome.date_received).filter(
+        BusinessIncome.user_id == current_user.id,
+        BusinessIncome.is_active == True,
+        BusinessIncome.is_approved == True,
+    ).all()
+    expense_dates = db.query(BusinessExpense.date_incurred).filter(
+        BusinessExpense.user_id == current_user.id,
+        BusinessExpense.is_active == True,
+        BusinessExpense.is_approved == True,
+    ).all()
+
+    years = sorted(
+        {_tax_year_label_for_date(d) for (d,) in [*income_dates, *expense_dates]},
+        reverse=True,
+    )
+    return BusinessTaxYearsOut(years=years, current_tax_year=_tax_year_label())
+
+
+@router.get("/tax-config", response_model=BusinessTaxConfigOut)
+def get_tax_config(
+    tax_year: str | None = Query(None, description="Tax year label e.g. '2025/26'; defaults to the current tax year."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    label = tax_year or _tax_year_label()
+    cfg = _get_biz_config(db, label)
     if not cfg:
-        raise HTTPException(status_code=404, detail="Business tax config not found for current tax year.")
+        raise HTTPException(status_code=404, detail=f"Business tax config not found for {label}.")
     return cfg
 
 
@@ -574,13 +613,14 @@ def get_tax_config(
 
 @router.get("/summary", response_model=BusinessSummaryOut)
 def get_business_summary(
+    tax_year: str | None = Query(None, description="Tax year label e.g. '2025/26'; defaults to the current tax year."),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    start = _tax_year_start()
-    end = _tax_year_end()
-    cfg = _get_biz_config(db)
-    tax_cfg = db.query(TaxYearConfig).filter_by(tax_year=_tax_year_label()).first()
+    label = tax_year or _tax_year_label()
+    start, end = _tax_year_bounds(label)
+    cfg = _get_biz_config(db, label)
+    tax_cfg = db.query(TaxYearConfig).filter_by(tax_year=label).first()
 
     income_ytd = (
         db.query(BusinessIncome)
@@ -667,6 +707,9 @@ def get_business_summary(
         tax_estimate = SoleTraderTaxOut(**vars(calc))
 
     return BusinessSummaryOut(
+        tax_year=label,
+        is_complete=end < date.today(),
+        tax_config_available=cfg is not None,
         revenue_ytd=revenue,
         total_expenses_ytd=total_expenses_ytd,
         allowable_expenses_ytd=allowable_expenses_ytd,

@@ -30,11 +30,22 @@ def _tax_year_label_for_today() -> str:
     return f"{year}/{str(year + 1)[2:]}"
 
 
-def seed_biz_config(db):
-    """Seed a BusinessTaxConfig (including Class 4/2 NI) for the current tax year."""
-    label = _tax_year_label_for_today()
+def _prior_tax_year_label() -> str:
+    """The tax year immediately before the current one — always fully completed."""
+    start_year = int(_tax_year_label_for_today().split("/")[0])
+    return f"{start_year - 1}/{str(start_year)[2:]}"
+
+
+def _date_in_tax_year(label: str) -> str:
+    """An arbitrary confirmed (past) date inside the given 'YYYY/YY' tax year — mid-June."""
+    start_year = int(label.split("/")[0])
+    return date(start_year, 6, 15).isoformat()
+
+
+def seed_biz_config_for(db, label, **overrides):
+    """Seed a BusinessTaxConfig (including Class 4/2 NI) for an arbitrary tax year."""
     if not db.query(BusinessTaxConfig).filter_by(tax_year=label).first():
-        db.add(BusinessTaxConfig(
+        defaults = dict(
             tax_year=label,
             home_office_band_25_50=10.0,
             home_office_band_51_100=18.0,
@@ -50,15 +61,16 @@ def seed_biz_config(db):
             class4_upper_rate=0.02,
             class2_small_profits_threshold=7105,
             class2_weekly_rate=3.65,
-        ))
+        )
+        defaults.update(overrides)
+        db.add(BusinessTaxConfig(**defaults))
         db.commit()
 
 
-def seed_tax_year_config(db):
-    """Seed a TaxYearConfig for the current tax year into the test DB."""
-    label = _tax_year_label_for_today()
+def seed_tax_year_config_for(db, label, **overrides):
+    """Seed a TaxYearConfig for an arbitrary tax year."""
     if not db.query(TaxYearConfig).filter_by(tax_year=label).first():
-        db.add(TaxYearConfig(
+        defaults = dict(
             tax_year=label,
             personal_allowance=12570,
             basic_rate_threshold=50270,
@@ -74,8 +86,20 @@ def seed_tax_year_config(db):
             pension_qualifying_upper=50270,
             pension_min_total_pct=8,
             pension_min_employer_pct=3,
-        ))
+        )
+        defaults.update(overrides)
+        db.add(TaxYearConfig(**defaults))
         db.commit()
+
+
+def seed_biz_config(db):
+    """Seed a BusinessTaxConfig (including Class 4/2 NI) for the current tax year."""
+    seed_biz_config_for(db, _tax_year_label_for_today())
+
+
+def seed_tax_year_config(db):
+    """Seed a TaxYearConfig for the current tax year into the test DB."""
+    seed_tax_year_config_for(db, _tax_year_label_for_today())
 
 
 # ---------------------------------------------------------------------------
@@ -750,6 +774,175 @@ def _post_mileage(client, headers, date_str, miles, vehicle_type):
     }, headers=headers)
     assert r.status_code == 201, r.json()
     return r.json()["id"]
+
+
+# ---------------------------------------------------------------------------
+# Tax year selector — /tax-years, and /summary + /tax-config with ?tax_year=
+# ---------------------------------------------------------------------------
+
+class TestTaxYearSelector:
+    def test_tax_years_endpoint_derives_from_data(self, client):
+        h = auth(client)
+        cur, prior = _tax_year_label_for_today(), _prior_tax_year_label()
+        client.post(INCOME_URL, json={"amount": 100.0, "date_received": TODAY}, headers=h)
+        client.post(INCOME_URL, json={"amount": 200.0, "date_received": _date_in_tax_year(prior)}, headers=h)
+
+        body = client.get("/api/business/tax-years", headers=h).json()
+        assert set(body["years"]) == {cur, prior}
+        assert body["current_tax_year"] == cur
+
+    def test_tax_years_sorted_most_recent_first(self, client):
+        h = auth(client)
+        cur, prior = _tax_year_label_for_today(), _prior_tax_year_label()
+        client.post(INCOME_URL, json={"amount": 100.0, "date_received": TODAY}, headers=h)
+        client.post(EXPENSE_URL, json={"amount": 50.0, "date_incurred": _date_in_tax_year(prior), "category": "software"}, headers=h)
+
+        years = client.get("/api/business/tax-years", headers=h).json()["years"]
+        assert years == [cur, prior]
+
+    def test_tax_years_empty_with_no_data(self, client):
+        h = auth(client)
+        body = client.get("/api/business/tax-years", headers=h).json()
+        assert body["years"] == []
+        assert body["current_tax_year"] == _tax_year_label_for_today()
+
+    def test_user_with_data_in_only_one_year_sees_only_that_year(self, client):
+        h = auth(client)
+        prior = _prior_tax_year_label()
+        client.post(INCOME_URL, json={"amount": 500.0, "date_received": _date_in_tax_year(prior)}, headers=h)
+
+        years = client.get("/api/business/tax-years", headers=h).json()["years"]
+        assert years == [prior]
+
+    def test_tax_years_isolated_per_user(self, client):
+        alice = auth(client, "alice@test.com")
+        bob   = auth(client, "bob@test.com")
+        client.post(INCOME_URL, json={"amount": 500.0, "date_received": TODAY}, headers=alice)
+        assert client.get("/api/business/tax-years", headers=bob).json()["years"] == []
+
+    def test_summary_defaults_to_current_year_and_matches_explicit_param(self, client):
+        h = auth(client)
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": TODAY}, headers=h)
+        cur = _tax_year_label_for_today()
+
+        implicit = client.get(SUMMARY_URL, headers=h).json()
+        explicit = client.get(SUMMARY_URL, params={"tax_year": cur}, headers=h).json()
+        assert implicit["tax_year"] == cur
+        assert implicit["is_complete"] is False
+        assert implicit["revenue_ytd"] == explicit["revenue_ytd"] == pytest.approx(1000.0)
+
+    def test_prior_completed_year_recalculates_all_figures_with_its_own_config(self, client, db):
+        h = auth(client)
+        prior = _prior_tax_year_label()
+        d = _date_in_tax_year(prior)
+
+        # Prior year's own rates — deliberately different from the seed_biz_config()/
+        # seed_tax_year_config() defaults used for "current year" elsewhere in this file,
+        # so a test that accidentally used the wrong year's config would fail loudly.
+        seed_biz_config_for(db, prior,
+            mileage_car_van_first=0.45, mileage_car_van_over=0.25, mileage_threshold=10000,
+            class4_lower_limit=12570, class4_upper_limit=50270,
+            class4_main_rate=0.06, class4_upper_rate=0.02,
+            class2_small_profits_threshold=6725, class2_weekly_rate=3.45,
+        )
+        seed_tax_year_config_for(db, prior,
+            personal_allowance=12570, basic_rate_threshold=50270, basic_rate_pct=20,
+            higher_rate_threshold=125140, higher_rate_pct=40, additional_rate_pct=45,
+            ni_primary_threshold=12570, ni_upper_threshold=50270, ni_main_rate_pct=8, ni_upper_rate_pct=2,
+            pension_qualifying_lower=6240, pension_qualifying_upper=50270,
+            pension_min_total_pct=8, pension_min_employer_pct=3,
+        )
+
+        client.post(INCOME_URL, json={"amount": 20000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={"amount": 1000.0, "date_incurred": d, "category": "software", "is_allowable": True}, headers=h)
+        _post_mileage(client, h, d, 500, "car_van")
+
+        body = client.get(SUMMARY_URL, params={"tax_year": prior}, headers=h).json()
+        assert body["tax_year"] == prior
+        assert body["is_complete"] is True
+        assert body["tax_config_available"] is True
+        assert body["revenue_ytd"] == pytest.approx(20000.0)
+        assert body["total_expenses_ytd"] == pytest.approx(1000.0)
+        # Mileage allowance uses the PRIOR year's 45p rate, not the current year's 55p.
+        assert body["total_mileage_allowance"] == pytest.approx(500 * 0.45)
+        assert body["allowable_expenses_ytd"] == pytest.approx(1000.0 + 500 * 0.45)
+        expected_profit = round(20000.0 - (1000.0 + 500 * 0.45), 2)
+        assert body["taxable_profit"] == pytest.approx(expected_profit)
+        assert body["tax_estimate"] is not None
+        assert body["tax_estimate"]["taxable_profit"] == pytest.approx(expected_profit)
+
+    def test_entries_from_other_tax_years_are_excluded(self, client):
+        h = auth(client)
+        cur, prior = _tax_year_label_for_today(), _prior_tax_year_label()
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": TODAY}, headers=h)
+        client.post(INCOME_URL, json={"amount": 7000.0, "date_received": _date_in_tax_year(prior)}, headers=h)
+
+        cur_body   = client.get(SUMMARY_URL, params={"tax_year": cur},   headers=h).json()
+        prior_body = client.get(SUMMARY_URL, params={"tax_year": prior}, headers=h).json()
+        assert cur_body["revenue_ytd"]   == pytest.approx(1000.0)
+        assert prior_body["revenue_ytd"] == pytest.approx(7000.0)
+
+    def test_mileage_threshold_scoped_per_selected_tax_year(self, client, db):
+        h = auth(client)
+        cur, prior = _tax_year_label_for_today(), _prior_tax_year_label()
+        seed_biz_config_for(db, cur,   mileage_car_van_first=0.55, mileage_car_van_over=0.25, mileage_threshold=10000)
+        seed_biz_config_for(db, prior, mileage_car_van_first=0.45, mileage_car_van_over=0.25, mileage_threshold=10000)
+
+        # 8,000 miles in the prior year and 8,000 in the current year: neither year
+        # alone crosses the 10,000-mile threshold, but the sum (16,000) would if the
+        # two years were wrongly pooled together.
+        _post_mileage(client, h, _date_in_tax_year(prior), 8000, "car_van")
+        _post_mileage(client, h, TODAY, 8000, "car_van")
+
+        cur_body   = client.get(SUMMARY_URL, params={"tax_year": cur},   headers=h).json()
+        prior_body = client.get(SUMMARY_URL, params={"tax_year": prior}, headers=h).json()
+
+        assert cur_body["total_business_miles"]   == 8000
+        assert prior_body["total_business_miles"] == 8000
+        # All-first-tier rate in both years — proof the threshold pool didn't bleed across years.
+        assert cur_body["total_mileage_allowance"]   == pytest.approx(8000 * 0.55)
+        assert prior_body["total_mileage_allowance"] == pytest.approx(8000 * 0.45)
+        assert "Threshold reached" not in (cur_body["mileage_crossover_msg"] or "")
+        assert "Threshold reached" not in (prior_body["mileage_crossover_msg"] or "")
+
+    def test_missing_config_for_selected_year_is_graceful_not_wrong_rates(self, client):
+        h = auth(client)
+        prior = _prior_tax_year_label()
+        d = _date_in_tax_year(prior)
+        # No BusinessTaxConfig/TaxYearConfig seeded for `prior` at all (only whatever
+        # the current year might have, which must NOT be silently applied instead).
+        client.post(INCOME_URL, json={"amount": 3000.0, "date_received": d}, headers=h)
+        client.post(EXPENSE_URL, json={"amount": 200.0, "date_incurred": d, "category": "software", "is_allowable": True}, headers=h)
+        _post_mileage(client, h, d, 1000, "car_van")
+
+        body = client.get(SUMMARY_URL, params={"tax_year": prior}, headers=h).json()
+        assert body["tax_config_available"] is False
+        assert body["tax_estimate"] is None
+        # Cash figures (not rate-dependent) are still correct...
+        assert body["revenue_ytd"] == pytest.approx(3000.0)
+        assert body["total_expenses_ytd"] == pytest.approx(200.0)
+        assert body["allowable_expenses_ytd"] == pytest.approx(200.0)
+        # ...but rate-dependent mileage allowance is reported as unavailable (0), not
+        # computed at the wrong (current) year's rate. Raw mileage is still visible.
+        assert body["total_business_miles"] == 1000
+        assert body["total_mileage_allowance"] == 0.0
+
+    def test_tax_config_endpoint_returns_selected_years_own_rates(self, client, db):
+        prior = _prior_tax_year_label()
+        seed_biz_config(db)  # current year, 0.55/mile
+        seed_biz_config_for(db, prior, mileage_car_van_first=0.45, mileage_car_van_over=0.25, mileage_threshold=10000)
+        h = auth(client)
+
+        cur_cfg   = client.get(TAX_CFG_URL, headers=h).json()
+        prior_cfg = client.get(TAX_CFG_URL, params={"tax_year": prior}, headers=h).json()
+        assert cur_cfg["mileage_car_van_first"]   == pytest.approx(0.55)
+        assert prior_cfg["mileage_car_van_first"] == pytest.approx(0.45)
+
+    def test_tax_config_endpoint_404_for_unseeded_selected_year(self, client, db):
+        seed_biz_config(db)  # current year only
+        h = auth(client)
+        r = client.get(TAX_CFG_URL, params={"tax_year": _prior_tax_year_label()}, headers=h)
+        assert r.status_code == 404
 
 
 class TestMileageAttribution:

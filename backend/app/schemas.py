@@ -444,7 +444,15 @@ class SoleTraderTaxOut(BaseModel):
     effective_rate: float
 
 
+class BusinessTaxYearsOut(BaseModel):
+    years: list[str]         # tax years with ≥1 confirmed entry, most recent first
+    current_tax_year: str    # for default selection in the frontend
+
+
 class BusinessSummaryOut(BaseModel):
+    tax_year: str
+    is_complete: bool            # true once this tax year's 5 April has passed
+    tax_config_available: bool   # false if no rates/thresholds are seeded for tax_year
     revenue_ytd: float
     total_expenses_ytd: float
     allowable_expenses_ytd: float
