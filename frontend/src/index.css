@@ -2524,6 +2524,69 @@ button.checklist-link {
   margin-bottom: 1rem;
 }
 
+/* Tax deadlines — fixed calendar dates, deliberately calmer/flatter than the
+   approvable/scheduled money rows so they read as informational, not editable. */
+.tax-deadline-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tax-deadline-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.65rem 0.9rem;
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+
+.tax-deadline-date {
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tax-deadline-label {
+  color: var(--color-text-muted);
+  flex: 1;
+  min-width: 0;
+}
+
+.tax-deadline-amount {
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* "Show all (N)" list expander */
+.show-all-toggle {
+  display: block;
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.6rem;
+  background: none;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.show-all-toggle:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
 /* Approval cards */
 .approval-list {
   display: flex;

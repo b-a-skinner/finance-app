@@ -7,6 +7,7 @@ import {
   CATEGORY_INFO, VEHICLE_LABELS, RECURRENCE_LABELS, formatDate, today, fmtMiles,
   homeOfficeFlatAllowance, IncomeModal, ExpenseModal,
 } from '../components/BusinessShared';
+import { getTaxDeadlines, visibleItems, LIST_CAP } from '../utils/upcoming';
 
 function entryLabel(entry) {
   if (entry._type === 'income') return entry.description || 'Income';
@@ -123,6 +124,26 @@ function ApprovalItem({ entry, apiFetch, onRefresh }) {
   );
 }
 
+function TaxDeadlineRow({ deadline }) {
+  return (
+    <li className="tax-deadline-row">
+      <span className="tax-deadline-date">{formatDate(deadline.date)}</span>
+      <span className="tax-deadline-label">{deadline.label}</span>
+      {deadline.amount != null && (
+        <span className="tax-deadline-amount">{gbp(deadline.amount)}</span>
+      )}
+    </li>
+  );
+}
+
+function ShowAllToggle({ total, onClick }) {
+  return (
+    <button type="button" className="show-all-toggle" onClick={onClick}>
+      Show all ({total})
+    </button>
+  );
+}
+
 function ScheduledItem({ entry, onEdit, taxConfig }) {
   const isIncome  = entry._type === 'income';
   const isMileage = !isIncome && entry.expense_method === 'mileage';
@@ -165,6 +186,8 @@ export default function Upcoming() {
   const [taxConfig, setTaxConfig] = useState(null);
   const [modal, setModal]       = useState(null);
   const [editItem, setEditItem] = useState(null);
+  const [showAllApproval, setShowAllApproval]   = useState(false);
+  const [showAllScheduled, setShowAllScheduled] = useState(false);
 
   const fetchUpcoming = useCallback(async () => {
     const [upRes, cfgRes] = await Promise.all([
@@ -215,6 +238,10 @@ export default function Upcoming() {
 
   const empty = awaiting.length === 0 && scheduled.length === 0;
 
+  const taxDeadlines = getTaxDeadlines(todayStr);
+  const approvalView  = visibleItems(awaiting, showAllApproval);
+  const scheduledView = visibleItems(scheduled, showAllScheduled);
+
   return (
     <>
       <NavBar />
@@ -223,6 +250,15 @@ export default function Upcoming() {
         <p className="upcoming-intro">
           Future-dated entries are held here as forecasts — they don't count in your figures until you approve them.
         </p>
+
+        <section className="upcoming-section tax-deadlines-section">
+          <h2 className="upcoming-section-title">Tax deadlines</h2>
+          <ul className="tax-deadline-list">
+            {taxDeadlines.map(deadline => (
+              <TaxDeadlineRow key={deadline.key} deadline={deadline} />
+            ))}
+          </ul>
+        </section>
 
         {empty && (
           <p className="list-empty" style={{ marginTop: '2rem' }}>
@@ -235,7 +271,7 @@ export default function Upcoming() {
             <h2 className="upcoming-section-title">To approve</h2>
             <p className="upcoming-section-sub">These entries' dates have passed — confirm the details and approve to count them in your figures, or dismiss if they didn't happen.</p>
             <div className="approval-list">
-              {awaiting.map(entry => (
+              {approvalView.visible.map(entry => (
                 <ApprovalItem
                   key={`${entry._type}-${entry.id}`}
                   entry={entry}
@@ -244,6 +280,9 @@ export default function Upcoming() {
                 />
               ))}
             </div>
+            {approvalView.hasMore && !showAllApproval && (
+              <ShowAllToggle total={approvalView.total} onClick={() => setShowAllApproval(true)} />
+            )}
           </section>
         )}
 
@@ -253,7 +292,7 @@ export default function Upcoming() {
             <p className="upcoming-section-sub">These are forecasts — they'll move to "To approve" once their date passes.</p>
             <div className="card">
               <ul className="item-list">
-                {scheduled.map(entry => (
+                {scheduledView.visible.map(entry => (
                   <ScheduledItem
                     key={`${entry._type}-${entry.id}`}
                     entry={entry}
@@ -263,6 +302,9 @@ export default function Upcoming() {
                 ))}
               </ul>
             </div>
+            {scheduledView.hasMore && !showAllScheduled && (
+              <ShowAllToggle total={scheduledView.total} onClick={() => setShowAllScheduled(true)} />
+            )}
           </section>
         )}
       </main>
