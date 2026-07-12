@@ -36,6 +36,9 @@ class BusinessTaxConfig(Base):
     class2_small_profits_threshold: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     class2_weekly_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # Payments on account de minimis — POAs are only due if the prior year's bill exceeds this (added 2026/27)
+    poa_threshold: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     source_note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
 

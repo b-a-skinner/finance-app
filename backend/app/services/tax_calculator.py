@@ -55,6 +55,15 @@ class SoleTraderTaxBreakdown:
 
 
 @dataclass
+class PoaBreakdown:
+    poa_triggered: bool
+    poa_instalment: float   # 50% of bill_lcy when triggered — both the January and July instalment amount
+    balancing_payment: float
+    january_total: float    # balancing_payment + poa_instalment
+    july_total: float       # == poa_instalment
+
+
+@dataclass
 class TakeHomeBreakdown:
     gross_annual: float
     income_tax: float
@@ -215,6 +224,43 @@ def calculate_sole_trader_tax(
         class2_voluntary_note=class2_note,
         total_set_aside=total_set_aside,
         effective_rate=effective_rate,
+    )
+
+
+def calculate_payments_on_account(
+    bill_lcy: float,
+    poa_threshold: float,
+    bill_prior: float = 0.0,
+    prior_poa_threshold: float | None = None,
+) -> PoaBreakdown:
+    """
+    Payments on account (for the year after LCY) and balancing payment (for LCY),
+    given LCY's finalised bill (income tax + Class 4 NI — Class 2 excluded by the
+    caller before this is invoked).
+
+    bill_prior defaults to 0.0, representing no prior year of trading — POAs
+    derived from it are then £0 regardless of prior_poa_threshold. This derives
+    POAs from the prior year's bill rather than tracking payments actually made,
+    which is correct in the normal case (no payment tracking here).
+
+    All thresholds are parameters — nothing is hardcoded, so a future change to
+    HMRC's £1,000 de minimis is a config change, not a code change.
+    """
+    if prior_poa_threshold is None:
+        prior_poa_threshold = poa_threshold
+
+    poas_from_prior = bill_prior if bill_prior > prior_poa_threshold else 0.0
+    balancing_payment = round(bill_lcy - poas_from_prior, 2)
+
+    poa_triggered = bill_lcy > poa_threshold
+    poa_instalment = round(bill_lcy * 0.5, 2) if poa_triggered else 0.0
+
+    return PoaBreakdown(
+        poa_triggered=poa_triggered,
+        poa_instalment=poa_instalment,
+        balancing_payment=balancing_payment,
+        january_total=round(balancing_payment + poa_instalment, 2),
+        july_total=poa_instalment,
     )
 
 

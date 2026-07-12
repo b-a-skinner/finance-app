@@ -14,6 +14,7 @@ EXPENSE_URL  = "/api/business/expenses"
 SUMMARY_URL  = "/api/business/summary"
 TAX_CFG_URL  = "/api/business/tax-config"
 UPCOMING_URL = "/api/business/upcoming"
+TAX_DEADLINES_URL = "/api/business/tax-deadlines"
 
 TODAY = date.today().isoformat()
 
@@ -34,6 +35,12 @@ def _prior_tax_year_label() -> str:
     """The tax year immediately before the current one — always fully completed."""
     start_year = int(_tax_year_label_for_today().split("/")[0])
     return f"{start_year - 1}/{str(start_year)[2:]}"
+
+
+def _year_label_offset(n: int) -> str:
+    """Tax year label n years before the current one (n=0 -> current, n=1 -> prior, ...)."""
+    start_year = int(_tax_year_label_for_today().split("/")[0]) - n
+    return f"{start_year}/{str(start_year + 1)[2:]}"
 
 
 def _date_in_tax_year(label: str) -> str:
@@ -61,6 +68,7 @@ def seed_biz_config_for(db, label, **overrides):
             class4_upper_rate=0.02,
             class2_small_profits_threshold=7105,
             class2_weekly_rate=3.65,
+            poa_threshold=1000,
         )
         defaults.update(overrides)
         db.add(BusinessTaxConfig(**defaults))
@@ -1105,6 +1113,135 @@ class TestSeedScriptSeeds2025_26AsData:
             assert cfg.ni_primary_threshold == cfg_2026.ni_primary_threshold
         finally:
             check.close()
+
+
+# ---------------------------------------------------------------------------
+# Tax deadline figures — /business/tax-deadlines (payments on account + balancing)
+# Worked-example arithmetic itself lives in tests/test_tax_calculator.py
+# (calculate_payments_on_account); these tests cover the DB/route orchestration:
+# picking LCY, finding (or not finding) the immediately preceding year, honest
+# no-data/config-missing handling, and Class 2 exclusion end-to-end.
+# ---------------------------------------------------------------------------
+
+class TestTaxDeadlineFigures:
+    def test_no_completed_year_with_no_data_at_all(self, client):
+        h = auth(client)
+        body = client.get(TAX_DEADLINES_URL, headers=h).json()
+        assert body["available"] is False
+        assert body["reason"] == "no_completed_year"
+        assert body["last_completed_year"] is None
+
+    def test_no_completed_year_when_only_current_year_has_data(self, client):
+        h = auth(client)
+        client.post(INCOME_URL, json={"amount": 1000.0, "date_received": TODAY}, headers=h)
+        body = client.get(TAX_DEADLINES_URL, headers=h).json()
+        assert body["available"] is False
+        assert body["reason"] == "no_completed_year"
+
+    def test_config_missing_for_lcy_is_reported_not_silently_wrong(self, client):
+        h = auth(client)
+        prior = _prior_tax_year_label()
+        client.post(INCOME_URL, json={"amount": 20000.0, "date_received": _date_in_tax_year(prior)}, headers=h)
+        # No BusinessTaxConfig/TaxYearConfig seeded for `prior` at all.
+        body = client.get(TAX_DEADLINES_URL, headers=h).json()
+        assert body["available"] is False
+        assert body["reason"] == "config_missing"
+        assert body["last_completed_year"] == prior
+        assert body["balancing_payment"] is None
+        assert body["january_total"] is None
+
+    def test_first_year_of_trading_end_to_end(self, client, db):
+        """No prior-year data at all → balancing payment is the full LCY bill."""
+        h = auth(client)
+        lcy = _prior_tax_year_label()
+        seed_biz_config_for(db, lcy)
+        seed_tax_year_config_for(db, lcy)
+        client.post(INCOME_URL, json={"amount": 30000.0, "date_received": _date_in_tax_year(lcy)}, headers=h)
+
+        body = client.get(TAX_DEADLINES_URL, headers=h).json()
+        assert body["available"] is True
+        assert body["last_completed_year"] == lcy
+        assert body["next_year"].split("/")[0] == str(int(lcy.split("/")[0]) + 1)
+        assert body["poa_threshold"] == pytest.approx(1000.0)
+        assert body["bill_lcy"] == pytest.approx(4531.80)
+        assert body["poa_triggered"] is True
+        assert body["poa_instalment"] == pytest.approx(2265.90)
+        assert body["balancing_payment"] == pytest.approx(4531.80)
+        assert body["january_total"] == pytest.approx(6797.70)
+        assert body["july_total"] == pytest.approx(2265.90)
+
+    def test_uses_only_the_immediately_preceding_completed_year(self, client, db):
+        """A year exists two years back too, but it must never be consulted —
+        'the app only ever needs the immediately preceding completed year.'"""
+        h = auth(client)
+        lcy = _year_label_offset(1)
+        lcy_minus_1 = _year_label_offset(2)
+        for label in (lcy, lcy_minus_1):
+            seed_biz_config_for(db, label)
+            seed_tax_year_config_for(db, label)
+
+        client.post(INCOME_URL, json={"amount": 30000.0, "date_received": _date_in_tax_year(lcy)}, headers=h)
+        client.post(INCOME_URL, json={"amount": 5000.0, "date_received": _date_in_tax_year(lcy_minus_1)}, headers=h)
+
+        body = client.get(TAX_DEADLINES_URL, headers=h).json()
+        assert body["last_completed_year"] == lcy
+        # lcy_minus_1's profit (£5,000) sits below the Class 4 lower limit and personal
+        # allowance, so its bill is £0 — no POAs from it — balancing = full LCY bill.
+        assert body["balancing_payment"] == pytest.approx(4531.80)
+
+    def test_class2_is_excluded_from_the_bill(self, client, db):
+        """Two configs with identical income-tax/Class-4 figures but wildly different
+        Class 2 thresholds/rates must produce an identical bill and POA figures."""
+        h = auth(client)
+        lcy = _prior_tax_year_label()
+        seed_biz_config_for(db, lcy, class2_small_profits_threshold=1.0, class2_weekly_rate=999.0)
+        seed_tax_year_config_for(db, lcy)
+        client.post(INCOME_URL, json={"amount": 30000.0, "date_received": _date_in_tax_year(lcy)}, headers=h)
+
+        body = client.get(TAX_DEADLINES_URL, headers=h).json()
+        assert body["bill_lcy"] == pytest.approx(4531.80)
+        assert body["january_total"] == pytest.approx(6797.70)
+
+    def test_threshold_read_from_lcys_own_config_not_hardcoded(self, client, db):
+        """A bill of £900 doesn't trigger POAs against a £1,000 threshold, but does
+        against a £500 one — proves the code reads cfg.poa_threshold, not a literal."""
+        h = auth(client)
+        lcy = _prior_tax_year_label()
+        seed_biz_config_for(db, lcy, poa_threshold=500)
+        seed_tax_year_config_for(db, lcy)
+        # A profit that produces a bill just above 500 but below 1000: (P-12570)*0.26 ≈ 900
+        # -> P ≈ 16032; use a clean profit and read back whatever bill results.
+        client.post(INCOME_URL, json={"amount": 16000.0, "date_received": _date_in_tax_year(lcy)}, headers=h)
+
+        body = client.get(TAX_DEADLINES_URL, headers=h).json()
+        assert body["poa_threshold"] == pytest.approx(500.0)
+        assert 500 < body["bill_lcy"] < 1000
+        assert body["poa_triggered"] is True
+
+    def test_read_only_endpoint_does_not_affect_summary_or_upcoming(self, client, db):
+        h = auth(client)
+        lcy = _prior_tax_year_label()
+        seed_biz_config_for(db, lcy)
+        seed_tax_year_config_for(db, lcy)
+        client.post(INCOME_URL, json={"amount": 30000.0, "date_received": _date_in_tax_year(lcy)}, headers=h)
+
+        summary_before  = client.get(SUMMARY_URL, params={"tax_year": lcy}, headers=h).json()
+        upcoming_before = client.get(UPCOMING_URL, headers=h).json()
+
+        client.get(TAX_DEADLINES_URL, headers=h)  # calling it must have no side effects
+
+        summary_after  = client.get(SUMMARY_URL, params={"tax_year": lcy}, headers=h).json()
+        upcoming_after = client.get(UPCOMING_URL, headers=h).json()
+        assert summary_after == summary_before
+        assert upcoming_after == upcoming_before
+
+    def test_isolated_per_user(self, client):
+        alice = auth(client, "alice@test.com")
+        bob   = auth(client, "bob@test.com")
+        client.post(INCOME_URL, json={"amount": 30000.0, "date_received": _date_in_tax_year(_prior_tax_year_label())}, headers=alice)
+        body = client.get(TAX_DEADLINES_URL, headers=bob).json()
+        assert body["available"] is False
+        assert body["reason"] == "no_completed_year"
 
 
 class TestMileageAttribution:

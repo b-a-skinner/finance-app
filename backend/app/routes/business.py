@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import BusinessExpense, BusinessIncome
 from app.models.config import BusinessTaxConfig, TaxYearConfig
-from app.services.tax_calculator import calculate_sole_trader_tax
+from app.services.tax_calculator import calculate_payments_on_account, calculate_sole_trader_tax
 from app.models.user import User
 from app.routes.auth import get_current_user
 from app.schemas import (
@@ -24,6 +24,7 @@ from app.schemas import (
     BusinessTaxYearsOut,
     BusinessUpcomingOut,
     SoleTraderTaxOut,
+    TaxDeadlineFiguresOut,
 )
 from app.utils import get_owned_or_404
 
@@ -570,28 +571,32 @@ def get_upcoming(
 # Tax config (read-only — seeded, not user-editable)
 # ---------------------------------------------------------------------------
 
+def _years_with_data(db: Session, user_id: int) -> list[str]:
+    """Tax years for which the user has at least one confirmed income or expense entry, most recent first."""
+    income_dates = db.query(BusinessIncome.date_received).filter(
+        BusinessIncome.user_id == user_id,
+        BusinessIncome.is_active == True,
+        BusinessIncome.is_approved == True,
+    ).all()
+    expense_dates = db.query(BusinessExpense.date_incurred).filter(
+        BusinessExpense.user_id == user_id,
+        BusinessExpense.is_active == True,
+        BusinessExpense.is_approved == True,
+    ).all()
+    return sorted(
+        {_tax_year_label_for_date(d) for (d,) in [*income_dates, *expense_dates]},
+        key=lambda label: int(label.split("/")[0]),
+        reverse=True,
+    )
+
+
 @router.get("/tax-years", response_model=BusinessTaxYearsOut)
 def list_tax_years(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Tax years for which the user has at least one confirmed income or expense entry."""
-    income_dates = db.query(BusinessIncome.date_received).filter(
-        BusinessIncome.user_id == current_user.id,
-        BusinessIncome.is_active == True,
-        BusinessIncome.is_approved == True,
-    ).all()
-    expense_dates = db.query(BusinessExpense.date_incurred).filter(
-        BusinessExpense.user_id == current_user.id,
-        BusinessExpense.is_active == True,
-        BusinessExpense.is_approved == True,
-    ).all()
-
-    years = sorted(
-        {_tax_year_label_for_date(d) for (d,) in [*income_dates, *expense_dates]},
-        reverse=True,
-    )
-    return BusinessTaxYearsOut(years=years, current_tax_year=_tax_year_label())
+    return BusinessTaxYearsOut(years=_years_with_data(db, current_user.id), current_tax_year=_tax_year_label())
 
 
 @router.get("/tax-config", response_model=BusinessTaxConfigOut)
@@ -611,13 +616,7 @@ def get_tax_config(
 # Summary
 # ---------------------------------------------------------------------------
 
-@router.get("/summary", response_model=BusinessSummaryOut)
-def get_business_summary(
-    tax_year: str | None = Query(None, description="Tax year label e.g. '2025/26'; defaults to the current tax year."),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    label = tax_year or _tax_year_label()
+def _build_summary(db: Session, current_user: User, label: str) -> BusinessSummaryOut:
     start, end = _tax_year_bounds(label)
     cfg = _get_biz_config(db, label)
     tax_cfg = db.query(TaxYearConfig).filter_by(tax_year=label).first()
@@ -722,4 +721,105 @@ def get_business_summary(
         mileage_crossover_msg=crossover_msg,
         mileage_attribution=mileage_attribution,
         tax_estimate=tax_estimate,
+    )
+
+
+@router.get("/summary", response_model=BusinessSummaryOut)
+def get_business_summary(
+    tax_year: str | None = Query(None, description="Tax year label e.g. '2025/26'; defaults to the current tax year."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    label = tax_year or _tax_year_label()
+    return _build_summary(db, current_user, label)
+
+
+# ---------------------------------------------------------------------------
+# Tax deadline figures — payments on account and balancing payment
+# ---------------------------------------------------------------------------
+
+def _prior_year_label(label: str) -> str:
+    start_year = int(label.split("/")[0])
+    return f"{start_year - 1}/{str(start_year)[2:]}"
+
+
+def _next_year_label(label: str) -> str:
+    start_year = int(label.split("/")[0])
+    return f"{start_year + 1}/{str(start_year + 2)[2:]}"
+
+
+def _get_poa_threshold(db: Session, label: str) -> float | None:
+    cfg = _get_biz_config(db, label)
+    return cfg.poa_threshold if cfg and cfg.poa_threshold is not None else None
+
+
+def _compute_bill(db: Session, current_user: User, label: str) -> float | None:
+    """Bill = income tax + Class 4 NI for the year (Class 2 excluded — see module docs).
+    None if the tax estimate can't be computed (rates not seeded for this year)."""
+    summary = _build_summary(db, current_user, label)
+    if summary.tax_estimate is None:
+        return None
+    return round(summary.tax_estimate.income_tax_on_profit + summary.tax_estimate.class4_ni, 2)
+
+
+def _unavailable(reason: str, last_completed_year: str | None = None, next_year: str | None = None,
+                  bill_lcy: float | None = None, poa_threshold: float | None = None) -> TaxDeadlineFiguresOut:
+    return TaxDeadlineFiguresOut(
+        available=False, reason=reason, last_completed_year=last_completed_year, next_year=next_year,
+        poa_threshold=poa_threshold, bill_lcy=bill_lcy,
+    )
+
+
+@router.get("/tax-deadlines", response_model=TaxDeadlineFiguresOut)
+def get_tax_deadline_figures(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Payments on account (POA) and balancing payment for the January/July Self
+    Assessment deadlines, computed from the most recent COMPLETED tax year (LCY)
+    the user has confirmed data for — a finished year gives a finalised bill, so
+    POAs are exact HMRC figures rather than a mid-year projection.
+
+    Bill(N)      = income tax + Class 4 NI for year N (Class 2 is excluded: it's
+                   either £0 for anyone paying Class 4, or voluntary otherwise, so
+                   it never forms part of the POA/balancing calculation).
+    POA(N+1)     = 50% × Bill(N) per instalment, only if Bill(N) > the de minimis
+                   threshold (read from N's own config — never hardcoded).
+    Balancing(N) = Bill(N) − (POAs derived from Bill(N−1), i.e. Bill(N−1) in full
+                   if it was itself above N−1's threshold, else £0). This derives
+                   POAs from the prior year's bill rather than tracking payments
+                   actually made — correct in the normal case; no payment tracking.
+    """
+    years = _years_with_data(db, current_user.id)
+    completed_years = [y for y in years if _tax_year_bounds(y)[1] < date.today()]
+    if not completed_years:
+        return _unavailable("no_completed_year")
+
+    lcy = max(completed_years, key=lambda label: int(label.split("/")[0]))
+    next_year = _next_year_label(lcy)
+
+    bill_lcy = _compute_bill(db, current_user, lcy)
+    poa_threshold = _get_poa_threshold(db, lcy)
+    if bill_lcy is None or poa_threshold is None:
+        return _unavailable("config_missing", last_completed_year=lcy, next_year=next_year, bill_lcy=bill_lcy, poa_threshold=poa_threshold)
+
+    prior_label = _prior_year_label(lcy)
+    bill_prior, prior_threshold = 0.0, poa_threshold
+    if prior_label in years:
+        bill_prior = _compute_bill(db, current_user, prior_label)
+        prior_threshold = _get_poa_threshold(db, prior_label)
+        if bill_prior is None or prior_threshold is None:
+            # Data exists for the prior year but its rates aren't seeded — we can't
+            # determine what POAs it would have set for this year, so we can't
+            # safely compute this year's balancing payment either.
+            return _unavailable("config_missing", last_completed_year=lcy, next_year=next_year, bill_lcy=bill_lcy, poa_threshold=poa_threshold)
+
+    poa = calculate_payments_on_account(bill_lcy, poa_threshold, bill_prior, prior_threshold)
+
+    return TaxDeadlineFiguresOut(
+        available=True, reason=None, last_completed_year=lcy, next_year=next_year,
+        poa_threshold=poa_threshold, bill_lcy=bill_lcy, poa_triggered=poa.poa_triggered,
+        poa_instalment=poa.poa_instalment, balancing_payment=poa.balancing_payment,
+        january_total=poa.january_total, july_total=poa.july_total,
     )

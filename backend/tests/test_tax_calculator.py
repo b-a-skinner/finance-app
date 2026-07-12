@@ -10,7 +10,9 @@ from app.services.tax_calculator import (
     TakeHomeBreakdown,
     calculate_income_tax,
     calculate_national_insurance,
+    calculate_payments_on_account,
     calculate_pension_contribution,
+    calculate_sole_trader_tax,
     calculate_student_loan_repayment,
     calculate_take_home_pay,
 )
@@ -225,3 +227,86 @@ class TestTakeHomePay:
     def test_net_monthly_is_net_annual_divided_by_12(self, cfg, plan2):
         result = calculate_take_home_pay(55_000, cfg, [plan2], 4.0, 3.0)
         assert result.net_monthly == round(result.net_annual / 12, 2)
+
+
+# ---------------------------------------------------------------------------
+# calculate_payments_on_account — POA + balancing payment
+# ---------------------------------------------------------------------------
+
+class TestCalculatePaymentsOnAccount:
+    def test_first_year_of_trading_worked_example(self):
+        """2025/26 taxable profit £30,000, no prior year of trading.
+        Income tax (30,000 − 12,570) × 20% = £3,486.
+        Class 4    (30,000 − 12,570) × 6%  = £1,045.80.
+        Bill = £4,531.80 → POA triggered (> £1,000); each instalment = £2,265.90.
+        No prior year → January balancing = £4,531.80 in full."""
+        cfg_2025_26 = SimpleNamespace(
+            personal_allowance=12_570, basic_rate_threshold=50_270, basic_rate_pct=20,
+            higher_rate_threshold=125_140, higher_rate_pct=40, additional_rate_pct=45,
+            ni_primary_threshold=12_584, ni_upper_threshold=50_284, ni_main_rate_pct=8, ni_upper_rate_pct=2,
+            pension_qualifying_lower=6_240, pension_qualifying_upper=50_270,
+        )
+        biz_cfg_2025_26 = SimpleNamespace(
+            class4_lower_limit=12_570, class4_upper_limit=50_270,
+            class4_main_rate=0.06, class4_upper_rate=0.02,
+            class2_small_profits_threshold=6_845, class2_weekly_rate=3.50,
+        )
+        tax = calculate_sole_trader_tax(30_000, cfg_2025_26, biz_cfg_2025_26)
+        assert tax.income_tax_on_profit == pytest.approx(3486.0)
+        assert tax.class4_ni == pytest.approx(1045.80)
+
+        bill = round(tax.income_tax_on_profit + tax.class4_ni, 2)
+        assert bill == pytest.approx(4531.80)
+
+        poa = calculate_payments_on_account(bill, poa_threshold=1000)
+        assert poa.poa_triggered is True
+        assert poa.poa_instalment == pytest.approx(2265.90)
+        assert poa.balancing_payment == pytest.approx(4531.80)
+        assert poa.january_total == pytest.approx(6797.70)
+        assert poa.july_total == pytest.approx(2265.90)
+
+    def test_under_threshold_no_poa(self):
+        poa = calculate_payments_on_account(bill_lcy=800.0, poa_threshold=1000.0)
+        assert poa.poa_triggered is False
+        assert poa.poa_instalment == 0.0
+        assert poa.balancing_payment == pytest.approx(800.0)
+        assert poa.january_total == pytest.approx(800.0)
+        assert poa.july_total == 0.0
+
+    def test_threshold_crossing_150_percent_hit_lands_in_crossing_year(self):
+        """Bill(N−1) = £800 (no POAs made), Bill(N) = £4,000 →
+        January = £4,000 balancing in full + £2,000 first POA = £6,000."""
+        poa = calculate_payments_on_account(bill_lcy=4000.0, poa_threshold=1000.0, bill_prior=800.0, prior_poa_threshold=1000.0)
+        assert poa.balancing_payment == pytest.approx(4000.0)
+        assert poa.poa_triggered is True
+        assert poa.poa_instalment == pytest.approx(2000.0)
+        assert poa.january_total == pytest.approx(6000.0)
+        assert poa.july_total == pytest.approx(2000.0)
+
+    def test_normal_second_year(self):
+        """Bill(N−1) = £4,531.80 (POAs of £2,265.90 × 2 already collected), Bill(N) = £5,000 →
+        balancing = £5,000 − £4,531.80 = £468.20; January = £468.20 + £2,500 = £2,968.20."""
+        poa = calculate_payments_on_account(bill_lcy=5000.0, poa_threshold=1000.0, bill_prior=4531.80, prior_poa_threshold=1000.0)
+        assert poa.balancing_payment == pytest.approx(468.20)
+        assert poa.poa_triggered is True
+        assert poa.poa_instalment == pytest.approx(2500.0)
+        assert poa.january_total == pytest.approx(2968.20)
+        assert poa.july_total == pytest.approx(2500.0)
+
+    def test_poa_threshold_is_a_parameter_not_hardcoded(self):
+        """The same £1,200 bill triggers POAs at a £1,000 threshold but not at a £1,500 one —
+        proves the de minimis is read from the passed-in config value, not hardcoded."""
+        low_threshold  = calculate_payments_on_account(bill_lcy=1200.0, poa_threshold=1000.0)
+        high_threshold = calculate_payments_on_account(bill_lcy=1200.0, poa_threshold=1500.0)
+        assert low_threshold.poa_triggered is True
+        assert high_threshold.poa_triggered is False
+
+    def test_prior_poa_threshold_defaults_to_current_threshold_when_unspecified(self):
+        poa = calculate_payments_on_account(bill_lcy=5000.0, poa_threshold=1000.0, bill_prior=4531.80)
+        assert poa.balancing_payment == pytest.approx(468.20)
+
+    def test_exactly_at_threshold_does_not_trigger(self):
+        """POAs are triggered ONLY if Bill > threshold — exactly-at-threshold must not trigger."""
+        poa = calculate_payments_on_account(bill_lcy=1000.0, poa_threshold=1000.0)
+        assert poa.poa_triggered is False
+        assert poa.balancing_payment == pytest.approx(1000.0)

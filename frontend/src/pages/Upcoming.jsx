@@ -7,7 +7,7 @@ import {
   CATEGORY_INFO, VEHICLE_LABELS, RECURRENCE_LABELS, formatDate, today, fmtMiles,
   homeOfficeFlatAllowance, IncomeModal, ExpenseModal,
 } from '../components/BusinessShared';
-import { getTaxDeadlines, visibleItems, LIST_CAP } from '../utils/upcoming';
+import { getTaxDeadlines, visibleItems, LIST_CAP, attachPoaFigures, poaExplanation } from '../utils/upcoming';
 
 function entryLabel(entry) {
   if (entry._type === 'income') return entry.description || 'Income';
@@ -127,10 +127,24 @@ function ApprovalItem({ entry, apiFetch, onRefresh }) {
 function TaxDeadlineRow({ deadline }) {
   return (
     <li className="tax-deadline-row">
-      <span className="tax-deadline-date">{formatDate(deadline.date)}</span>
-      <span className="tax-deadline-label">{deadline.label}</span>
-      {deadline.amount != null && (
-        <span className="tax-deadline-amount">{gbp(deadline.amount)}</span>
+      <div className="tax-deadline-row-main">
+        <span className="tax-deadline-date">{formatDate(deadline.date)}</span>
+        <span className="tax-deadline-label">{deadline.label}</span>
+        {deadline.amount != null && (
+          <span className="tax-deadline-amount">
+            {deadline.amount === 0 ? 'No payment due' : gbp(deadline.amount)}
+          </span>
+        )}
+      </div>
+      {deadline.breakdown && (
+        <ul className="tax-deadline-breakdown">
+          {deadline.breakdown.map(b => (
+            <li key={b.label}>
+              <span className="breakdown-label">{b.label}</span>
+              <span>{gbp(b.amount)}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </li>
   );
@@ -184,15 +198,17 @@ export default function Upcoming() {
   const [income, setIncome]     = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [taxConfig, setTaxConfig] = useState(null);
+  const [poaFigures, setPoaFigures] = useState(null);
   const [modal, setModal]       = useState(null);
   const [editItem, setEditItem] = useState(null);
   const [showAllApproval, setShowAllApproval]   = useState(false);
   const [showAllScheduled, setShowAllScheduled] = useState(false);
 
   const fetchUpcoming = useCallback(async () => {
-    const [upRes, cfgRes] = await Promise.all([
+    const [upRes, cfgRes, poaRes] = await Promise.all([
       apiFetch('/api/business/upcoming'),
       apiFetch('/api/business/tax-config'),
+      apiFetch('/api/business/tax-deadlines'),
     ]);
     if (upRes.ok) {
       const data = await upRes.json();
@@ -200,6 +216,7 @@ export default function Upcoming() {
       setExpenses(data.expenses);
     }
     if (cfgRes.ok) setTaxConfig(await cfgRes.json());
+    if (poaRes.ok) setPoaFigures(await poaRes.json());
     setLoading(false);
   }, [apiFetch]);
 
@@ -238,7 +255,8 @@ export default function Upcoming() {
 
   const empty = awaiting.length === 0 && scheduled.length === 0;
 
-  const taxDeadlines = getTaxDeadlines(todayStr);
+  const taxDeadlines = attachPoaFigures(getTaxDeadlines(todayStr), poaFigures);
+  const explanation  = poaExplanation(poaFigures, todayStr);
   const approvalView  = visibleItems(awaiting, showAllApproval);
   const scheduledView = visibleItems(scheduled, showAllScheduled);
 
@@ -258,6 +276,8 @@ export default function Upcoming() {
               <TaxDeadlineRow key={deadline.key} deadline={deadline} />
             ))}
           </ul>
+          {explanation && <p className="tax-deadline-explanation">{explanation}</p>}
+          <p className="tax-deadline-disclaimer">This is a calculation tool, not tax advice.</p>
         </section>
 
         {empty && (

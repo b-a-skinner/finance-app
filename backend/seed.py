@@ -114,6 +114,8 @@ def seed() -> None:
                 # Class 2 NI (2026/27 HMRC)
                 class2_small_profits_threshold=7105,
                 class2_weekly_rate=3.65,
+                # Payments on account de minimis (HMRC) — unchanged year to year unless HMRC updates it
+                poa_threshold=1000,
                 source_note="HMRC simplified expenses, 2026/27. Mileage rate increased from 45p to 55p from 6 April 2026.",
             ))
             db.commit()
@@ -150,10 +152,20 @@ def seed() -> None:
                 # Class 2 NI (2025/26 HMRC)
                 class2_small_profits_threshold=6845,
                 class2_weekly_rate=3.50,
+                # Payments on account de minimis (HMRC) — unchanged year to year unless HMRC updates it
+                poa_threshold=1000,
                 source_note="HMRC simplified expenses, AMAP and NIC rates, 2025/26",
             ))
             db.commit()
             print("Seeded BusinessTaxConfig for 2025/26.")
+
+        # Backfill poa_threshold for any BusinessTaxConfig rows seeded before this column existed.
+        stale_poa = db.query(BusinessTaxConfig).filter(BusinessTaxConfig.poa_threshold.is_(None)).all()
+        if stale_poa:
+            for cfg in stale_poa:
+                cfg.poa_threshold = 1000
+            db.commit()
+            print(f"Backfilled poa_threshold for {len(stale_poa)} BusinessTaxConfig row(s).")
 
         if not db.query(RegionalSalaryBenchmark).first():
             _R = "ONS ASHE, April 2025, released October 2025"

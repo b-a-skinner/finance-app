@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { nextOccurrence, getTaxDeadlines, visibleItems, LIST_CAP, TAX_DEADLINE_RULES } from '../utils/upcoming';
+import {
+  nextOccurrence, getTaxDeadlines, visibleItems, LIST_CAP, TAX_DEADLINE_RULES,
+  attachPoaFigures, poaExplanation, currentTaxYearLabel, mostRecentlyEndedTaxYearLabel,
+} from '../utils/upcoming';
 
 // ---------------------------------------------------------------------------
 // nextOccurrence
@@ -173,5 +176,161 @@ describe('.tax-deadline-row CSS', () => {
   it('does not reuse the approval-item card shadow treatment', () => {
     expect(block).not.toMatch(/box-shadow/);
     expect(approvalBlock).toMatch(/box-shadow/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// currentTaxYearLabel / mostRecentlyEndedTaxYearLabel
+// ---------------------------------------------------------------------------
+
+describe('currentTaxYearLabel', () => {
+  it('returns the current tax year on/after 6 April', () => {
+    expect(currentTaxYearLabel('2026-04-06')).toBe('2026/27');
+    expect(currentTaxYearLabel('2026-07-12')).toBe('2026/27');
+  });
+
+  it('returns the prior tax year before 6 April', () => {
+    expect(currentTaxYearLabel('2026-04-05')).toBe('2025/26');
+    expect(currentTaxYearLabel('2026-01-15')).toBe('2025/26');
+  });
+});
+
+describe('mostRecentlyEndedTaxYearLabel', () => {
+  it('is one year before the current tax year', () => {
+    expect(mostRecentlyEndedTaxYearLabel('2026-07-12')).toBe('2025/26');
+    expect(mostRecentlyEndedTaxYearLabel('2026-01-15')).toBe('2024/25');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// attachPoaFigures
+// ---------------------------------------------------------------------------
+
+describe('attachPoaFigures', () => {
+  const baseDeadlines = getTaxDeadlines('2026-03-01');
+
+  it('leaves rows unchanged when poa is null (not yet fetched)', () => {
+    const result = attachPoaFigures(baseDeadlines, null);
+    expect(result).toEqual(baseDeadlines);
+  });
+
+  it('leaves rows unchanged when poa.available is false', () => {
+    const poa = { available: false, reason: 'no_completed_year' };
+    const result = attachPoaFigures(baseDeadlines, poa);
+    expect(result).toEqual(baseDeadlines);
+  });
+
+  describe('when POAs are triggered', () => {
+    const poa = {
+      available: true, last_completed_year: '2025/26', next_year: '2026/27',
+      poa_threshold: 1000, bill_lcy: 4531.80, poa_triggered: true,
+      poa_instalment: 2265.90, balancing_payment: 4531.80,
+      january_total: 6797.70, july_total: 2265.90,
+    };
+    const result = attachPoaFigures(baseDeadlines, poa);
+    const jan = result.find(d => d.key === 'self-assessment-filing');
+    const jul = result.find(d => d.key === 'payment-on-account-2');
+
+    it('January shows the combined total', () => {
+      expect(jan.amount).toBe(6797.70);
+    });
+
+    it('January label names both components', () => {
+      expect(jan.label).toContain('Balancing payment for 2025/26');
+      expect(jan.label).toContain('first payment on account for 2026/27');
+    });
+
+    it('January breaks out the two components with their own amounts', () => {
+      expect(jan.breakdown).toEqual([
+        { label: 'Balancing payment for 2025/26', amount: 4531.80 },
+        { label: 'First payment on account for 2026/27', amount: 2265.90 },
+      ]);
+    });
+
+    it('July shows the second instalment', () => {
+      expect(jul.label).toContain('Second payment on account for 2026/27');
+      expect(jul.amount).toBe(2265.90);
+    });
+  });
+
+  describe('when the bill is under threshold (no POAs)', () => {
+    const poa = {
+      available: true, last_completed_year: '2025/26', next_year: '2026/27',
+      poa_threshold: 1000, bill_lcy: 800, poa_triggered: false,
+      poa_instalment: 0, balancing_payment: 800,
+      january_total: 800, july_total: 0,
+    };
+    const result = attachPoaFigures(baseDeadlines, poa);
+    const jan = result.find(d => d.key === 'self-assessment-filing');
+    const jul = result.find(d => d.key === 'payment-on-account-2');
+
+    it('January shows just the balancing payment, no breakdown', () => {
+      expect(jan.amount).toBe(800);
+      expect(jan.breakdown).toBeNull();
+      expect(jan.label).not.toContain('payment on account');
+    });
+
+    it('July shows zero — nothing due', () => {
+      expect(jul.amount).toBe(0);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// poaExplanation
+// ---------------------------------------------------------------------------
+
+describe('poaExplanation', () => {
+  it('returns null when poa has not been fetched yet', () => {
+    expect(poaExplanation(null, '2026-07-12')).toBeNull();
+  });
+
+  it('explains no-completed-year honestly, naming a target year, without inventing figures', () => {
+    const text = poaExplanation({ available: false, reason: 'no_completed_year' }, '2026-07-12');
+    expect(text).toContain('2025/26');
+    expect(text).toContain("We need a full tax year");
+    expect(text).not.toMatch(/£\d/); // no invented amount
+  });
+
+  it('explains missing config for a known LCY', () => {
+    const text = poaExplanation({ available: false, reason: 'config_missing', last_completed_year: '2025/26' }, '2026-07-12');
+    expect(text).toContain('2025/26');
+  });
+
+  it('explains the January total plainly when POAs are triggered', () => {
+    const poa = {
+      available: true, last_completed_year: '2025/26', next_year: '2026/27',
+      poa_threshold: 1000, poa_triggered: true, poa_instalment: 2265.90, balancing_payment: 4531.80,
+    };
+    const text = poaExplanation(poa, '2026-07-12');
+    expect(text).toContain('2025/26');
+    expect(text).toContain('2026/27');
+    expect(text).toContain('Payments on account');
+    expect(text).toContain("Based on the 2025/26 income and expenses you've entered.");
+  });
+
+  it('explains the under-£1,000 case without showing nothing', () => {
+    const poa = {
+      available: true, last_completed_year: '2025/26', next_year: '2026/27',
+      poa_threshold: 1000, poa_triggered: false, poa_instalment: 0, balancing_payment: 800,
+    };
+    const text = poaExplanation(poa, '2026-07-12');
+    expect(text).toContain('under');
+    expect(text).toContain("you don't need to make payments on account");
+    expect(text).toContain('2026/27');
+    expect(text).toContain("Based on the 2025/26 income and expenses you've entered.");
+  });
+
+  it('always includes the partial-data caveat whenever figures are shown', () => {
+    const triggered = poaExplanation({
+      available: true, last_completed_year: '2024/25', next_year: '2025/26',
+      poa_threshold: 1000, poa_triggered: true, poa_instalment: 100, balancing_payment: 100,
+    }, '2026-07-12');
+    const underThreshold = poaExplanation({
+      available: true, last_completed_year: '2024/25', next_year: '2025/26',
+      poa_threshold: 1000, poa_triggered: false, poa_instalment: 0, balancing_payment: 100,
+    }, '2026-07-12');
+    expect(triggered).toContain('Based on the 2024/25 income and expenses');
+    expect(underThreshold).toContain('Based on the 2024/25 income and expenses');
   });
 });

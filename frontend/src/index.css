@@ -2581,14 +2581,20 @@ button.checklist-link {
 
 .tax-deadline-row {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.6rem;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 0.65rem 0.9rem;
   background: var(--color-surface);
   border: 1px dashed var(--color-border);
   border-radius: var(--radius);
   font-size: 0.875rem;
+}
+
+.tax-deadline-row-main {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
 
 .tax-deadline-date {
@@ -2610,6 +2616,36 @@ button.checklist-link {
   font-variant-numeric: tabular-nums;
   margin-left: auto;
   white-space: nowrap;
+}
+
+.tax-deadline-breakdown {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--color-border);
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.tax-deadline-breakdown li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tax-deadline-explanation {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  margin-top: 0.75rem;
+}
+
+.tax-deadline-disclaimer {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 0.4rem;
 }
 
 /* "Show all (N)" list expander */

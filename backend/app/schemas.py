@@ -431,6 +431,8 @@ class BusinessTaxConfigOut(BaseModel):
     # Class 2 NI
     class2_small_profits_threshold: float | None = None
     class2_weekly_rate: float | None = None
+    # Payments on account de minimis — nullable: rows seeded before this column existed will return null
+    poa_threshold: float | None = None
 
 
 class SoleTraderTaxOut(BaseModel):
@@ -442,6 +444,20 @@ class SoleTraderTaxOut(BaseModel):
     class2_voluntary_note: str | None
     total_set_aside: float
     effective_rate: float
+
+
+class TaxDeadlineFiguresOut(BaseModel):
+    available: bool
+    reason: str | None = None                  # "no_completed_year" | "config_missing" (when available=False)
+    last_completed_year: str | None = None      # LCY — most recent tax year with confirmed data whose 5 April has passed
+    next_year: str | None = None                # LCY + 1 — the year POAs are paid towards
+    poa_threshold: float | None = None          # de minimis used, from LCY's config — for transparency, not hardcoded
+    bill_lcy: float | None = None               # income tax + Class 4 NI for LCY (Class 2 excluded)
+    poa_triggered: bool = False
+    poa_instalment: float = 0.0                 # 50% of bill_lcy when triggered — both Jan's first POA and July's second POA
+    balancing_payment: float | None = None       # Bill(LCY) minus POAs derived from Bill(LCY-1)
+    january_total: float | None = None          # balancing_payment + poa_instalment
+    july_total: float | None = None             # == poa_instalment
 
 
 class BusinessTaxYearsOut(BaseModel):
