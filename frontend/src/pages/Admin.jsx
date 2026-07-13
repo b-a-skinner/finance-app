@@ -51,6 +51,29 @@ function ProfileCompletion({ pc }) {
   );
 }
 
+const BIZ_FEATURE_CATS  = ['income', 'expenses', 'mileage', 'home_office', 'recurring', 'scheduled'];
+const BIZ_FEATURE_SHORT = { income: 'Inc', expenses: 'Exp', mileage: 'Mil', home_office: 'HO', recurring: 'Rec', scheduled: 'Sch' };
+const BIZ_TYPE_LABELS   = {
+  sole_trader: 'Sole trader', limited_company: 'Limited company', partnership: 'Partnership',
+  llp: 'LLP', not_sure: 'Not sure', not_set: 'Not set',
+};
+
+function BusinessBadges({ bf }) {
+  return (
+    <span className="adm-profile-cats">
+      {BIZ_FEATURE_CATS.map(k => (
+        <span
+          key={k}
+          title={k}
+          className={`adm-profile-cat${bf[k] ? ' adm-profile-cat--done' : ''}`}
+        >
+          {BIZ_FEATURE_SHORT[k]}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export default function Admin() {
   const [authed,    setAuthed]    = useState(false);
   const [loading,   setLoading]   = useState(false);
@@ -172,6 +195,34 @@ export default function Admin() {
               ))}
             </div>
           </section>
+
+          <section className="adm-section">
+            <h2 className="adm-section-title">Business</h2>
+            <div className="adm-stat-grid">
+              <StatCard label="Users in business mode"  value={stats.business_overview.users_in_business_mode} />
+              <StatCard label="With business income"    value={stats.business_overview.users_with_business_income} />
+              <StatCard label="With business expenses"  value={stats.business_overview.users_with_business_expenses} />
+              <StatCard label="Completed a tax year"    value={stats.business_overview.users_with_completed_tax_year} />
+            </div>
+          </section>
+
+          <section className="adm-section">
+            <h2 className="adm-section-title">Business type breakdown</h2>
+            <div className="adm-stat-grid">
+              {Object.entries(stats.business_type_breakdown).map(([key, count]) => (
+                <StatCard key={key} label={BIZ_TYPE_LABELS[key] ?? key} value={count} />
+              ))}
+            </div>
+          </section>
+
+          <section className="adm-section">
+            <h2 className="adm-section-title">Business feature adoption</h2>
+            <div className="adm-stat-grid">
+              {Object.entries(stats.business_feature_adoption).map(([key, pct]) => (
+                <StatCard key={key} label={key} value={`${pct}%`} />
+              ))}
+            </div>
+          </section>
         </>
       )}
 
@@ -191,6 +242,9 @@ export default function Admin() {
                   <th>Onboarding</th>
                   <th>Profile</th>
                   <th>Goals</th>
+                  <th className="adm-table-group-start">Business</th>
+                  <th>Type</th>
+                  <th>Biz features</th>
                   <th></th>
                 </tr>
               </thead>
@@ -204,6 +258,9 @@ export default function Admin() {
                     <td>{u.onboarding_completed ? <span className="adm-check">✓</span> : <span className="adm-muted">—</span>}</td>
                     <td><ProfileCompletion pc={u.profile_complete} /></td>
                     <td className="adm-muted">{u.financial_goals ? u.financial_goals.length : '—'}</td>
+                    <td className="adm-table-group-start">{u.business_mode ? <span className="adm-check">✓</span> : <span className="adm-muted">—</span>}</td>
+                    <td className="adm-muted">{BIZ_TYPE_LABELS[u.business_type] ?? <span className="adm-muted">—</span>}</td>
+                    <td><BusinessBadges bf={u.business_features} /></td>
                     <td>
                       <button
                         className="adm-delete-btn"

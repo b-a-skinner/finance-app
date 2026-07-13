@@ -1457,6 +1457,9 @@ button.checklist-link {
 .adm-table tr:last-child td { border-bottom: none; }
 .adm-table tr:hover td { background: rgba(26, 58, 92, 0.02); }
 
+/* Visually separates the business badge columns from the personal ones */
+.adm-table-group-start { border-left: 2px solid var(--color-border); }
+
 .adm-muted { color: var(--color-text-muted); }
 
 .adm-check {
