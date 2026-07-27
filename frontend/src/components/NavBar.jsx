@@ -3,18 +3,18 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const PERSONAL_LINKS = [
-  { to: '/dashboard', label: 'Dashboard' },
-  { to: '/income',    label: 'Income' },
-  { to: '/expenses',  label: 'Expenses' },
-  { to: '/debts',     label: 'Debts' },
-  { to: '/savings',   label: 'Savings & Investments', shortLabel: 'Savings' },
-  { to: '/pension',   label: 'Pension' },
-  { to: '/assets',    label: 'Assets' },
-  { to: '/profile',   label: 'Profile' },
+  { to: '/personal',          label: 'Dashboard' },
+  { to: '/personal/income',   label: 'Income' },
+  { to: '/personal/expenses', label: 'Expenses' },
+  { to: '/personal/debts',    label: 'Debts' },
+  { to: '/personal/savings',  label: 'Savings & Investments', shortLabel: 'Savings' },
+  { to: '/personal/pension',  label: 'Pension' },
+  { to: '/personal/assets',   label: 'Assets' },
+  { to: '/personal/profile',  label: 'Profile' },
 ];
 
 const BUSINESS_LINKS = [
-  { to: '/business',     label: 'Dashboard' },
+  { to: '/',             label: 'Dashboard' },
   { to: '/transactions', label: 'Transactions' },
   { to: '/upcoming',     label: 'Upcoming' },
   { to: '/profile',      label: 'Profile' },
@@ -26,7 +26,9 @@ export default function NavBar() {
   const [open, setOpen] = useState(false);
   const navRef = useRef(null);
 
-  const navLinks = activeMode === 'business' ? BUSINESS_LINKS : PERSONAL_LINKS;
+  // Business is the primary/default side — only an explicit 'personal' selection
+  // switches the nav away from it.
+  const navLinks = activeMode === 'personal' ? PERSONAL_LINKS : BUSINESS_LINKS;
 
   useEffect(() => {
     function handleOutside(e) {
@@ -51,9 +53,9 @@ export default function NavBar() {
   function handleModeSwitch(mode) {
     switchMode(mode);
     if (mode === 'business') {
-      navigate(businessType ? '/business' : '/choose-business-type', { replace: true });
+      navigate(businessType ? '/' : '/choose-business-type', { replace: true });
     } else {
-      navigate('/dashboard', { replace: true });
+      navigate('/personal', { replace: true });
     }
   }
 

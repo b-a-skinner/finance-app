@@ -21,7 +21,7 @@ export default function ChooseBusinessType() {
     if (!selected) return;
     setSaving(true);
     setBusinessType(selected);
-    navigate('/business', { replace: true });
+    navigate('/', { replace: true });
   }
 
   return (

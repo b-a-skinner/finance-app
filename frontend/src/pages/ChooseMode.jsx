@@ -9,9 +9,9 @@ export default function ChooseMode() {
     switchMode(mode);
     if (mode === 'business') {
       // Show business type setup if not yet captured
-      navigate(businessType ? '/business' : '/choose-business-type', { replace: true });
+      navigate(businessType ? '/' : '/choose-business-type', { replace: true });
     } else {
-      navigate('/dashboard', { replace: true });
+      navigate('/personal', { replace: true });
     }
   }
 

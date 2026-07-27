@@ -78,7 +78,7 @@ function SavingsModal({ onClose, onSuccess }) {
   }
 
   return (
-    <ModalShell title="Add savings account" moreHref="/savings" onClose={onClose}>
+    <ModalShell title="Add savings account" moreHref="/personal/savings" onClose={onClose}>
       <form onSubmit={handleSubmit} className="qa-form">
         {error && <p className="qa-error">{error}</p>}
         <div className="form-group">
@@ -138,7 +138,7 @@ function PensionModal({ onClose, onSuccess }) {
   }
 
   return (
-    <ModalShell title="Add pension" moreHref="/pension" onClose={onClose}>
+    <ModalShell title="Add pension" moreHref="/personal/pension" onClose={onClose}>
       <form onSubmit={handleSubmit} className="qa-form">
         {error && <p className="qa-error">{error}</p>}
         <div className="form-group">
@@ -192,7 +192,7 @@ function AssetModal({ onClose, onSuccess }) {
   }
 
   return (
-    <ModalShell title="Add asset" moreHref="/assets" onClose={onClose}>
+    <ModalShell title="Add asset" moreHref="/personal/assets" onClose={onClose}>
       <form onSubmit={handleSubmit} className="qa-form">
         {error && <p className="qa-error">{error}</p>}
         <div className="form-group">
@@ -265,7 +265,7 @@ function DebtModal({ onClose, onSuccess }) {
   }
 
   return (
-    <ModalShell title="Add debt" moreHref="/debts" onClose={onClose}>
+    <ModalShell title="Add debt" moreHref="/personal/debts" onClose={onClose}>
       <form onSubmit={handleSubmit} className="qa-form">
         {error && <p className="qa-error">{error}</p>}
         <div className="form-group">
@@ -347,7 +347,7 @@ function ExpenseModal({ onClose, onSuccess }) {
   }
 
   return (
-    <ModalShell title="Add expense" moreHref="/expenses" onClose={onClose}>
+    <ModalShell title="Add expense" moreHref="/personal/expenses" onClose={onClose}>
       <form onSubmit={handleSubmit} className="qa-form">
         {error && <p className="qa-error">{error}</p>}
         <div className="form-group">

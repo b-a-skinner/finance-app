@@ -7,7 +7,8 @@ import Upcoming from './pages/Upcoming';
 import ChooseMode from './pages/ChooseMode';
 import ChooseBusinessType from './pages/ChooseBusinessType';
 import Dashboard from './pages/Dashboard';
-import Profile from './pages/Profile';
+import BusinessProfile from './pages/BusinessProfile';
+import PersonalProfile from './pages/PersonalProfile';
 import Debts from './pages/Debts';
 import Expenses from './pages/Expenses';
 import Income from './pages/Income';
@@ -34,22 +35,30 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/dashboard" element={<P><Dashboard /></P>} />
-          <Route path="/income" element={<P><Income /></P>} />
-          <Route path="/expenses" element={<P><Expenses /></P>} />
-          <Route path="/debts" element={<P><Debts /></P>} />
-          <Route path="/assets" element={<P><Assets /></P>} />
-          <Route path="/savings" element={<P><Savings /></P>} />
-          <Route path="/pension" element={<P><Pension /></P>} />
-          <Route path="/business" element={<P><Business /></P>} />
+
+          {/* Business — primary/root experience */}
+          <Route path="/" element={<P><Business /></P>} />
           <Route path="/transactions" element={<P><Transactions /></P>} />
           <Route path="/upcoming" element={<P><Upcoming /></P>} />
+          <Route path="/profile" element={<P><BusinessProfile /></P>} />
+
+          {/* Personal — subordinate, nested under /personal */}
+          <Route path="/personal" element={<P><Dashboard /></P>} />
+          <Route path="/personal/income" element={<P><Income /></P>} />
+          <Route path="/personal/expenses" element={<P><Expenses /></P>} />
+          <Route path="/personal/debts" element={<P><Debts /></P>} />
+          <Route path="/personal/assets" element={<P><Assets /></P>} />
+          <Route path="/personal/savings" element={<P><Savings /></P>} />
+          <Route path="/personal/pension" element={<P><Pension /></P>} />
+          <Route path="/personal/profile" element={<P><PersonalProfile /></P>} />
+
+          {/* Shared / onboarding */}
           <Route path="/choose-mode" element={<P><ChooseMode /></P>} />
           <Route path="/choose-business-type" element={<P><ChooseBusinessType /></P>} />
-          <Route path="/profile" element={<P><Profile /></P>} />
           <Route path="/goals" element={<P><GoalsOnboarding /></P>} />
           <Route path="/admin" element={<Admin />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

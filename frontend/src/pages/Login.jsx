@@ -46,13 +46,9 @@ export default function Login() {
     try {
       await login(email, password);
       const mode = await loadModeFromServer();
-      if (mode === 'business') {
-        navigate('/business', { replace: true });
-      } else if (mode === 'personal') {
-        navigate('/dashboard', { replace: true });
-      } else {
-        navigate('/choose-mode', { replace: true });
-      }
+      // Business is the front door: land there unless the user has an explicit,
+      // previously-saved preference for personal.
+      navigate(mode === 'personal' ? '/personal' : '/', { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {

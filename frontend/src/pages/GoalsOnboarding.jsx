@@ -22,19 +22,19 @@ export default function GoalsOnboarding() {
 
   useEffect(() => {
     if (localStorage.getItem(SEEN_KEY) === '1') {
-      navigate('/dashboard', { replace: true });
+      navigate('/personal', { replace: true });
       return;
     }
     apiFetch('/api/profile/onboarding')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data || data.onboarding_completed || data.financial_goals !== null) {
-          navigate('/dashboard', { replace: true });
+          navigate('/personal', { replace: true });
           return;
         }
         setReady(true);
       })
-      .catch(() => navigate('/dashboard', { replace: true }));
+      .catch(() => navigate('/personal', { replace: true }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggle(key) {
@@ -50,12 +50,12 @@ export default function GoalsOnboarding() {
         body: JSON.stringify({ financial_goals: JSON.stringify(selected) }),
       });
     } catch (_) { /* non-critical */ }
-    navigate('/dashboard', { replace: true });
+    navigate('/personal', { replace: true });
   }
 
   function handleSkip() {
     localStorage.setItem(SEEN_KEY, '1');
-    navigate('/dashboard', { replace: true });
+    navigate('/personal', { replace: true });
   }
 
   if (!ready) return null;

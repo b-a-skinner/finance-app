@@ -10,7 +10,7 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
   const [activeMode, setActiveModeState] = useState(
-    () => localStorage.getItem(MODE_KEY) || null,
+    () => localStorage.getItem(MODE_KEY) || 'business',
   );
   const [businessType, setBusinessTypeState] = useState(
     () => localStorage.getItem(BUSINESS_TYPE_KEY) || null,
@@ -48,15 +48,18 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(MODE_KEY);
     localStorage.removeItem(BUSINESS_TYPE_KEY);
     setToken(null);
-    setActiveModeState(null);
+    setActiveModeState('business');
     setBusinessTypeState(null);
   }
 
   // Fetch profile from server, sync active_mode + business_type into local state.
-  // Returns the mode string ('personal'|'business'|null).
+  // Business is the app's default/front-door side: a user who has never set an
+  // explicit preference (active_mode is null server-side) defaults to 'business'
+  // here rather than propagating null further.
+  // Returns the mode string ('personal'|'business').
   async function loadModeFromServer() {
     const currentToken = localStorage.getItem(TOKEN_KEY);
-    if (!currentToken) return null;
+    if (!currentToken) return 'business';
     try {
       const res = await fetch(`${API_BASE}/api/profile`, {
         headers: {
@@ -64,12 +67,11 @@ export function AuthProvider({ children }) {
           Authorization: `Bearer ${currentToken}`,
         },
       });
-      if (!res.ok) return null;
+      if (!res.ok) return 'business';
       const data = await res.json();
 
-      const mode = data.active_mode ?? null;
-      if (mode) localStorage.setItem(MODE_KEY, mode);
-      else localStorage.removeItem(MODE_KEY);
+      const mode = data.active_mode || 'business';
+      localStorage.setItem(MODE_KEY, mode);
       setActiveModeState(mode);
 
       const btype = data.business_type ?? null;
@@ -79,7 +81,7 @@ export function AuthProvider({ children }) {
 
       return mode;
     } catch {
-      return null;
+      return 'business';
     }
   }
 

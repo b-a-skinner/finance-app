@@ -260,7 +260,7 @@ export default function Dashboard() {
                   <NwRow
                     label="Savings & investments"
                     addLabel="Add savings & investments"
-                    to="/savings"
+                    to="/personal/savings"
                     value={total_savings_balance}
                     metric={period?.total_savings_balance}
                     onAdd={() => openModal('savings')}
@@ -268,7 +268,7 @@ export default function Dashboard() {
                   <NwRow
                     label="Pension pot"
                     addLabel="Add pension"
-                    to="/pension"
+                    to="/personal/pension"
                     value={pension_pot_balance}
                     metric={period?.pension_pot_balance}
                     onAdd={() => openModal('pension')}
@@ -276,14 +276,14 @@ export default function Dashboard() {
                   <NwRow
                     label="Assets"
                     addLabel="Add assets"
-                    to="/assets"
+                    to="/personal/assets"
                     value={total_assets_value}
                     onAdd={() => openModal('asset')}
                   />
                   <NwRow
                     label="Total debt"
                     addLabel="Add debts"
-                    to="/debts"
+                    to="/personal/debts"
                     value={total_debt_balance}
                     displayValue={`−${gbp(total_debt_balance)}`}
                     metric={period?.total_debt_balance}
@@ -306,7 +306,7 @@ export default function Dashboard() {
               <p className="card-title">Income &amp; Deductions</p>
               {!hasIncome ? (
                 <div className="dash-prompts" style={{ padding: '0.5rem 0' }}>
-                  <DashPrompt to="/income">Add your salary to see your tax breakdown →</DashPrompt>
+                  <DashPrompt to="/personal/income">Add your salary to see your tax breakdown →</DashPrompt>
                 </div>
               ) : (
                 <>
@@ -361,7 +361,7 @@ export default function Dashboard() {
                     <td>{gbp(t.net_monthly)}</td>
                   </tr>
                   {monthly_expenses > 0 ? (
-                    <tr className="nw-row-link row-muted" onClick={() => navigate('/expenses')}>
+                    <tr className="nw-row-link row-muted" onClick={() => navigate('/personal/expenses')}>
                       <td>Expenses</td>
                       <td>−{gbp(monthly_expenses)}</td>
                     </tr>
@@ -369,7 +369,7 @@ export default function Dashboard() {
                     <OutgoingsAddRow addLabel="Add expenses" onAdd={() => openModal('expense')} />
                   )}
                   {monthly_debt_payments > 0 && (
-                    <tr className="nw-row-link row-muted" onClick={() => navigate('/debts')}>
+                    <tr className="nw-row-link row-muted" onClick={() => navigate('/personal/debts')}>
                       <td>Debt payments</td>
                       <td>−{gbp(monthly_debt_payments)}</td>
                     </tr>
@@ -407,7 +407,7 @@ export default function Dashboard() {
                 </p>
               ) : (
                 <div className="dash-prompts">
-                  <DashPrompt to="/expenses">Add your monthly expenses to see your financial runway →</DashPrompt>
+                  <DashPrompt to="/personal/expenses">Add your monthly expenses to see your financial runway →</DashPrompt>
                 </div>
               )}
             </div>

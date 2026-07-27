@@ -74,7 +74,7 @@ function NoPensionSlide() {
   return (
     <SlideLayout
       line1={<>You haven&apos;t added a pension yet.{' '}
-        <Link to="/pension" className="carousel-prompt-link">Add your pension pot</Link>{' '}
+        <Link to="/personal/pension" className="carousel-prompt-link">Add your pension pot</Link>{' '}
         to see how you compare.</>}
       line2="Pension comparison uses ONS Wealth and Assets Survey age-group benchmarks"
     />
@@ -85,7 +85,7 @@ function NoIncomeSlide() {
   return (
     <SlideLayout
       line1={<>You haven&apos;t added an income source yet.{' '}
-        <Link to="/income" className="carousel-prompt-link">Add your salary</Link>{' '}
+        <Link to="/personal/income" className="carousel-prompt-link">Add your salary</Link>{' '}
         to see how you compare.</>}
       line2="Salary comparison uses ONS Annual Survey of Hours and Earnings (ASHE)"
     />

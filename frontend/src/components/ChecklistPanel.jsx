@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 const ITEMS = [
-  { key: 'income',   label: 'Income',                path: '/income' },
-  { key: 'expenses', label: 'Expenses',              path: '/expenses' },
-  { key: 'debts',    label: 'Debts',                 path: '/debts' },
-  { key: 'savings',  label: 'Savings & Investments', path: '/savings' },
-  { key: 'pension',  label: 'Pension',               path: '/pension' },
-  { key: 'assets',   label: 'Assets',                path: '/assets' },
+  { key: 'income',   label: 'Income',                path: '/personal/income' },
+  { key: 'expenses', label: 'Expenses',              path: '/personal/expenses' },
+  { key: 'debts',    label: 'Debts',                 path: '/personal/debts' },
+  { key: 'savings',  label: 'Savings & Investments', path: '/personal/savings' },
+  { key: 'pension',  label: 'Pension',               path: '/personal/pension' },
+  { key: 'assets',   label: 'Assets',                path: '/personal/assets' },
 ];
 
 const HAS_MODAL = new Set(['expenses', 'debts', 'savings', 'pension', 'assets']);
