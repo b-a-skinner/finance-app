@@ -1,7 +1,7 @@
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -26,6 +26,11 @@ class User(TimestampMixin, Base):
     postcode_outward: Mapped[str | None] = mapped_column(String(10), nullable=True)
     active_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
     business_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    # JWTs issued before this timestamp are rejected — the only way to invalidate
+    # existing sessions with a stateless JWT setup that has no revocation store.
+    # Set on password reset; null means "no reset has happened, don't check."
+    token_valid_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     onboarding_dismiss_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

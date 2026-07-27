@@ -43,6 +43,28 @@ export function AuthProvider({ children }) {
     }
   }
 
+  async function forgotPassword(email) {
+    const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || 'Something went wrong. Please try again.');
+    return body.message;
+  }
+
+  async function resetPassword(token, newPassword) {
+    const res = await fetch(`${API_BASE}/api/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || 'Something went wrong. Please try again.');
+    return body.message;
+  }
+
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(MODE_KEY);
@@ -144,6 +166,8 @@ export function AuthProvider({ children }) {
         businessType,
         login,
         register,
+        forgotPassword,
+        resetPassword,
         logout,
         switchMode,
         setBusinessType,

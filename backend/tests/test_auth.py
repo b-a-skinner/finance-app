@@ -495,3 +495,203 @@ class TestDebtProjectionEndpoint:
         # Bob cannot access Alice's debt projection (404, not 403, to prevent data leakage)
         resp = client.get(f"/api/debts/{alice_debt_id}/projection", headers=bob_headers)
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Password reset — forgot-password / reset-password
+# ---------------------------------------------------------------------------
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+import pytest  # noqa: E402
+
+from app.models import PasswordResetToken  # noqa: E402
+from app.models.user import User  # noqa: E402
+from app.routes import auth as auth_module  # noqa: E402
+
+FORGOT_PASSWORD = "/api/auth/forgot-password"
+RESET_PASSWORD  = "/api/auth/reset-password"
+PROFILE_URL     = "/api/profile"
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """The rate limiter is a module-level in-process dict — without this it
+    would accumulate hits across every test in this file and eventually 429
+    tests that have nothing to do with rate limiting."""
+    auth_module._rate_limit_hits.clear()
+    yield
+
+
+@pytest.fixture
+def captured_reset_emails(monkeypatch):
+    """Intercepts the (email, raw_token) that would have been emailed, without
+    making any real network call to Resend."""
+    calls = []
+
+    def fake_send(email, raw_token):
+        calls.append((email, raw_token))
+
+    monkeypatch.setattr(auth_module, "_send_reset_email", fake_send)
+    return calls
+
+
+class TestForgotPassword:
+    def test_no_enumeration_registered_vs_unregistered(self, client, captured_reset_emails):
+        _register(client)
+        r1 = client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        r2 = client.post(FORGOT_PASSWORD, json={"email": "nobody-registered@example.com"})
+        assert r1.status_code == r2.status_code == 200
+        assert r1.json() == r2.json() == {"message": auth_module.FORGOT_PASSWORD_MESSAGE}
+
+    def test_sends_email_only_for_registered_user(self, client, captured_reset_emails):
+        _register(client)
+        client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        client.post(FORGOT_PASSWORD, json={"email": "nobody-registered@example.com"})
+        assert len(captured_reset_emails) == 1
+        assert captured_reset_emails[0][0] == _ALICE["email"]
+
+    def test_token_stored_hashed_never_plaintext(self, client, db, captured_reset_emails):
+        _register(client)
+        client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        raw_token = captured_reset_emails[0][1]
+
+        row = db.query(PasswordResetToken).order_by(PasswordResetToken.id.desc()).first()
+        assert row is not None
+        assert len(row.token_hash) == 64          # sha256 hex digest length
+        assert row.token_hash != raw_token
+        assert raw_token not in [r.token_hash for r in db.query(PasswordResetToken).all()]
+
+    def test_expiry_is_one_hour(self, client, db, captured_reset_emails):
+        _register(client)
+        client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        row = db.query(PasswordResetToken).order_by(PasswordResetToken.id.desc()).first()
+        delta = row.expires_at - row.created_at
+        assert timedelta(minutes=59) < delta < timedelta(minutes=61)
+
+    def test_new_request_invalidates_previous_unused_token(self, client, captured_reset_emails):
+        _register(client)
+        client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        first_token = captured_reset_emails[0][1]
+
+        client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        second_token = captured_reset_emails[1][1]
+
+        stale = client.post(RESET_PASSWORD, json={"token": first_token, "new_password": "somepassword1"})
+        assert stale.status_code == 400
+
+        fresh = client.post(RESET_PASSWORD, json={"token": second_token, "new_password": "somepassword1"})
+        assert fresh.status_code == 200
+
+    def test_rate_limited_after_max_attempts(self, client):
+        for _ in range(auth_module.RATE_LIMIT_MAX_ATTEMPTS):
+            assert client.post(FORGOT_PASSWORD, json={"email": "rl-target@example.com"}).status_code == 200
+        r = client.post(FORGOT_PASSWORD, json={"email": "rl-target@example.com"})
+        assert r.status_code == 429
+
+    def test_forgot_password_succeeds_even_if_email_provider_is_down(self, client, monkeypatch):
+        import httpx
+        from app import email as email_module
+
+        _register(client)
+        monkeypatch.setattr(email_module, "RESEND_API_KEY", "fake-key-for-test")
+
+        def boom(*a, **k):
+            raise httpx.ConnectError("connection refused")
+        monkeypatch.setattr(email_module.httpx, "post", boom)
+
+        r = client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        assert r.status_code == 200
+        assert r.json() == {"message": auth_module.FORGOT_PASSWORD_MESSAGE}
+        assert "ConnectError" not in r.text and "httpx" not in r.text
+
+
+class TestResetPassword:
+    def test_valid_token_resets_password(self, client, captured_reset_emails):
+        _register(client)
+        client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        raw_token = captured_reset_emails[0][1]
+
+        r = client.post(RESET_PASSWORD, json={"token": raw_token, "new_password": "brandnewpass1"})
+        assert r.status_code == 200
+
+        assert client.post(LOGIN, data={"username": _ALICE["email"], "password": "brandnewpass1"}).status_code == 200
+        assert client.post(LOGIN, data={"username": _ALICE["email"], "password": _ALICE["password"]}).status_code == 401
+
+    def test_token_is_single_use(self, client, captured_reset_emails):
+        _register(client)
+        client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        raw_token = captured_reset_emails[0][1]
+
+        first = client.post(RESET_PASSWORD, json={"token": raw_token, "new_password": "firstnewpass1"})
+        assert first.status_code == 200
+        second = client.post(RESET_PASSWORD, json={"token": raw_token, "new_password": "secondnewpass1"})
+        assert second.status_code == 400
+
+    def test_expired_token_rejected(self, client, db, captured_reset_emails):
+        _register(client)
+        client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        raw_token = captured_reset_emails[0][1]
+
+        row = db.query(PasswordResetToken).order_by(PasswordResetToken.id.desc()).first()
+        row.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        db.commit()
+
+        r = client.post(RESET_PASSWORD, json={"token": raw_token, "new_password": "newpassword1"})
+        assert r.status_code == 400
+
+    def test_invalid_token_rejected_with_generic_message(self, client):
+        r = client.post(RESET_PASSWORD, json={"token": "totally-bogus-token", "new_password": "newpassword1"})
+        assert r.status_code == 400
+        assert r.json()["detail"] == "This reset link is invalid or has expired."
+
+    def test_password_validation_applies(self, client, captured_reset_emails):
+        _register(client)
+        client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        raw_token = captured_reset_emails[0][1]
+        r = client.post(RESET_PASSWORD, json={"token": raw_token, "new_password": "short"})
+        assert r.status_code == 400
+        assert "8 characters" in r.json()["detail"]
+
+    def test_reset_invalidates_existing_jwt_sessions(self, client, captured_reset_emails):
+        _register(client)
+        old_headers = _auth_header(client)
+        assert client.get(PROFILE_URL, headers=old_headers).status_code == 200
+
+        client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        raw_token = captured_reset_emails[0][1]
+        client.post(RESET_PASSWORD, json={"token": raw_token, "new_password": "brandnewpass1"})
+
+        # The JWT issued before the reset must now be rejected — the only way to
+        # invalidate a session with no server-side blacklist/session store.
+        assert client.get(PROFILE_URL, headers=old_headers).status_code == 401
+
+        # A fresh login with the new password still works normally.
+        new_headers = _auth_header(client, {"email": _ALICE["email"], "password": "brandnewpass1"})
+        assert client.get(PROFILE_URL, headers=new_headers).status_code == 200
+
+    def test_reset_invalidates_other_outstanding_tokens_for_same_user(self, client, db):
+        """Two unused tokens for the same user exist simultaneously (e.g. a race
+        between two reset requests) — redeeming one must kill the other too,
+        not just the one that was used."""
+        import secrets as secrets_module
+        _register(client)
+        user = db.query(User).filter_by(email=_ALICE["email"]).first()
+        now = datetime.now(timezone.utc)
+
+        raw_a, raw_b = secrets_module.token_urlsafe(32), secrets_module.token_urlsafe(32)
+        db.add(PasswordResetToken(user_id=user.id, token_hash=auth_module._hash_token(raw_a), expires_at=now + timedelta(hours=1)))
+        db.add(PasswordResetToken(user_id=user.id, token_hash=auth_module._hash_token(raw_b), expires_at=now + timedelta(hours=1)))
+        db.commit()
+
+        r = client.post(RESET_PASSWORD, json={"token": raw_a, "new_password": "firstpassword1"})
+        assert r.status_code == 200
+
+        r2 = client.post(RESET_PASSWORD, json={"token": raw_b, "new_password": "secondpassword1"})
+        assert r2.status_code == 400
+
+
+class TestRegistrationStillWorksWithoutEmailVerification:
+    def test_register_with_fake_unverifiable_email(self, client):
+        r = client.post(REGISTER, json={"email": "definitely-not-real@example-fake-domain.test", "password": "s3cur3!"})
+        assert r.status_code == 201

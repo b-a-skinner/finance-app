@@ -13,6 +13,8 @@ import Debts from './pages/Debts';
 import Expenses from './pages/Expenses';
 import Income from './pages/Income';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Pension from './pages/Pension';
 import Register from './pages/Register';
 import Savings from './pages/Savings';
@@ -35,6 +37,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Business — primary/root experience */}
           <Route path="/" element={<P><Business /></P>} />
