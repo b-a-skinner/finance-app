@@ -536,6 +536,43 @@ def captured_reset_emails(monkeypatch):
     return calls
 
 
+@pytest.fixture
+def captured_reset_links(monkeypatch):
+    """Goes one layer deeper than captured_reset_emails: lets the real
+    _send_reset_email build the real HTML with the real link (exactly what a
+    user would receive), only stubbing the actual network call to Resend.
+    Tests using this fixture extract the token the same way a browser would —
+    by parsing the URL — rather than reading it out of Python directly."""
+    from app import email as email_module
+
+    sent = []
+
+    def fake_send_email(to, subject, html):
+        sent.append({"to": to, "subject": subject, "html": html})
+        return True
+
+    monkeypatch.setattr(email_module, "RESEND_API_KEY", "fake-key-for-test")
+    monkeypatch.setattr(auth_module, "send_email", fake_send_email)
+    return sent
+
+
+def _register_and_get_user(client, db, credentials=_ALICE):
+    _register(client, credentials)
+    return db.query(User).filter_by(email=credentials["email"]).first()
+
+
+def _extract_token_from_link(html: str) -> str:
+    """Mirrors what the browser + ResetPassword.jsx do: parse the token out of
+    the URL's query string, not out of raw Python state."""
+    import re
+    from urllib.parse import urlparse, parse_qs
+
+    match = re.search(r'href="([^"]+)"', html)
+    assert match, "no link found in the reset email HTML"
+    query = parse_qs(urlparse(match.group(1)).query)
+    return query["token"][0]
+
+
 class TestForgotPassword:
     def test_no_enumeration_registered_vs_unregistered(self, client, captured_reset_emails):
         _register(client)
@@ -689,6 +726,183 @@ class TestResetPassword:
 
         r2 = client.post(RESET_PASSWORD, json={"token": raw_b, "new_password": "secondpassword1"})
         assert r2.status_code == 400
+
+
+class TestResetPasswordExactlyAsDelivered:
+    """Exercises the real link construction (app/email.py's HTML + URL, not a
+    Python-level shortcut), extracting the token by parsing the URL exactly
+    like a browser / ResetPassword.jsx would. This is the true end-to-end
+    path — request reset, use the exact link as delivered, reset succeeds,
+    new password works, old one doesn't."""
+
+    def test_full_round_trip_via_the_real_delivered_link(self, client, captured_reset_links):
+        _register(client)
+        r = client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        assert r.status_code == 200
+        assert len(captured_reset_links) == 1
+
+        token_from_link = _extract_token_from_link(captured_reset_links[0]["html"])
+
+        reset_r = client.post(RESET_PASSWORD, json={"token": token_from_link, "new_password": "brandnewpass1"})
+        assert reset_r.status_code == 200
+
+        assert client.post(LOGIN, data={"username": _ALICE["email"], "password": "brandnewpass1"}).status_code == 200
+        assert client.post(LOGIN, data={"username": _ALICE["email"], "password": _ALICE["password"]}).status_code == 401
+
+    def test_link_uses_configured_frontend_url_not_a_stale_default(self, client, captured_reset_links, monkeypatch):
+        monkeypatch.setattr(auth_module, "FRONTEND_URL", "https://fivera.co.uk")
+        _register(client)
+        client.post(FORGOT_PASSWORD, json={"email": _ALICE["email"]})
+        assert "https://fivera.co.uk/reset-password?token=" in captured_reset_links[0]["html"]
+
+
+class TestTokenUrlRoundTrip:
+    """The actual root cause of the reported bug wasn't in this app's own
+    request handling (both were already correct — see below) but in a
+    deployment config gap (see TestFrontendUrlFallback). These tests still
+    lock in that the token itself safely survives URL/query-string handling,
+    since that was the other prime suspect and is worth guarding regardless."""
+
+    def test_token_survives_url_query_string_round_trip(self):
+        import secrets as secrets_module
+        from urllib.parse import urlencode, urlparse, parse_qs
+
+        for _ in range(50):
+            raw_token = secrets_module.token_urlsafe(32)
+            link = f"https://fivera.co.uk/reset-password?{urlencode({'token': raw_token})}"
+            recovered = parse_qs(urlparse(link).query)["token"][0]
+            assert recovered == raw_token
+            assert auth_module._hash_token(recovered) == auth_module._hash_token(raw_token)
+
+    def test_dash_and_underscore_tokens_specifically(self):
+        """token_urlsafe can emit '-' and '_' — confirm those specifically
+        survive the round trip, since they were the prime suspect."""
+        import secrets as secrets_module
+        from urllib.parse import urlencode, urlparse, parse_qs
+
+        found_dash = found_underscore = False
+        for _ in range(200):
+            raw_token = secrets_module.token_urlsafe(32)
+            found_dash |= "-" in raw_token
+            found_underscore |= "_" in raw_token
+            link = f"https://fivera.co.uk/reset-password?{urlencode({'token': raw_token})}"
+            recovered = parse_qs(urlparse(link).query)["token"][0]
+            assert recovered == raw_token
+        assert found_dash and found_underscore, "test didn't happen to generate both — rerun"
+
+
+class TestResetTokenTimezoneHandling:
+    def test_valid_at_creation(self, client, db):
+        user = _register_and_get_user(client, db)
+        raw = "tz-test-token-valid-now"
+        db.add(PasswordResetToken(user_id=user.id, token_hash=auth_module._hash_token(raw), expires_at=datetime.now(timezone.utc) + timedelta(hours=1)))
+        db.commit()
+        r = client.post(RESET_PASSWORD, json={"token": raw, "new_password": "newpassword1"})
+        assert r.status_code == 200
+
+    def test_valid_at_59_minutes(self, client, db):
+        user = _register_and_get_user(client, db)
+        raw = "tz-test-token-59-min"
+        created_at = datetime.now(timezone.utc)
+        db.add(PasswordResetToken(user_id=user.id, token_hash=auth_module._hash_token(raw), expires_at=created_at + timedelta(hours=1)))
+        db.commit()
+        # Simulate 59 minutes having passed by moving the token back in time instead
+        # of sleeping in the test.
+        row = db.query(PasswordResetToken).filter_by(token_hash=auth_module._hash_token(raw)).first()
+        row.expires_at = datetime.now(timezone.utc) + timedelta(minutes=1)
+        db.commit()
+        r = client.post(RESET_PASSWORD, json={"token": raw, "new_password": "newpassword1"})
+        assert r.status_code == 200
+
+    def test_expired_at_61_minutes(self, client, db):
+        user = _register_and_get_user(client, db)
+        raw = "tz-test-token-61-min"
+        db.add(PasswordResetToken(user_id=user.id, token_hash=auth_module._hash_token(raw), expires_at=datetime.now(timezone.utc) - timedelta(minutes=1)))
+        db.commit()
+        r = client.post(RESET_PASSWORD, json={"token": raw, "new_password": "newpassword1"})
+        assert r.status_code == 400
+
+    def test_naive_expires_at_is_treated_as_utc_not_rejected_as_wrong_timezone(self, client, db):
+        """Guards the exact class of bug the report suspected: if a value ever
+        round-trips through the DB as a naive datetime, it must still be
+        compared correctly (as UTC), not silently treated as already expired
+        (or as never expiring) because of a naive/aware mismatch."""
+        user = _register_and_get_user(client, db)
+        raw = "tz-test-token-naive"
+        naive_future = (datetime.now(timezone.utc) + timedelta(minutes=30)).replace(tzinfo=None)
+        db.add(PasswordResetToken(user_id=user.id, token_hash=auth_module._hash_token(raw), expires_at=naive_future))
+        db.commit()
+        r = client.post(RESET_PASSWORD, json={"token": raw, "new_password": "newpassword1"})
+        assert r.status_code == 200
+
+
+class TestFrontendUrlFallback:
+    """Regression coverage for the actual root cause: FRONTEND_URL and
+    CORS_ORIGINS had independent, disconnected defaults. In production,
+    CORS_ORIGINS was correctly set (the deployed frontend couldn't call the
+    API at all otherwise) but FRONTEND_URL was never documented or set, so it
+    silently defaulted to http://localhost:5173. A reset email built with that
+    default opens fine against a local dev frontend — which then validates
+    the token against a completely different database than the one that
+    issued it, always failing as 'invalid'."""
+
+    def test_frontend_url_falls_back_to_first_cors_origin_when_unset(self, monkeypatch):
+        import importlib
+        monkeypatch.delenv("FRONTEND_URL", raising=False)
+        monkeypatch.setenv("CORS_ORIGINS", "https://fivera.co.uk,https://other.example.com")
+
+        import app.config as config_module
+        importlib.reload(config_module)
+        try:
+            assert config_module.FRONTEND_URL == "https://fivera.co.uk"
+        finally:
+            monkeypatch.delenv("CORS_ORIGINS", raising=False)
+            importlib.reload(config_module)
+
+    def test_explicit_frontend_url_still_wins_over_cors_origins(self, monkeypatch):
+        import importlib
+        monkeypatch.setenv("FRONTEND_URL", "https://explicit.example.com")
+        monkeypatch.setenv("CORS_ORIGINS", "https://fivera.co.uk")
+
+        import app.config as config_module
+        importlib.reload(config_module)
+        try:
+            assert config_module.FRONTEND_URL == "https://explicit.example.com"
+        finally:
+            monkeypatch.delenv("FRONTEND_URL", raising=False)
+            monkeypatch.delenv("CORS_ORIGINS", raising=False)
+            importlib.reload(config_module)
+
+
+class TestResetPageLoadDoesNotConsumeToken:
+    def test_token_remains_unused_until_reset_actually_submitted(self, client, db):
+        """There is no 'validate token' endpoint the reset page calls on load —
+        only POST /reset-password touches used_at, and only on success. This
+        proves a token is still valid (unused) after being created, before any
+        reset attempt — i.e. nothing marks it used just by existing/being
+        looked up."""
+        user = _register_and_get_user(client, db)
+        raw = "page-load-should-not-consume-this-token"
+        db.add(PasswordResetToken(user_id=user.id, token_hash=auth_module._hash_token(raw), expires_at=datetime.now(timezone.utc) + timedelta(hours=1)))
+        db.commit()
+
+        row = db.query(PasswordResetToken).filter_by(token_hash=auth_module._hash_token(raw)).first()
+        assert row.used_at is None
+
+        # Only the actual reset submission consumes it.
+        r = client.post(RESET_PASSWORD, json={"token": raw, "new_password": "newpassword1"})
+        assert r.status_code == 200
+        db.refresh(row)
+        assert row.used_at is not None
+
+    def test_resource_page_source_has_no_token_validation_call_on_mount(self):
+        """Source-scan guard (no component-rendering lib in this project):
+        ResetPassword.jsx must call resetPassword() only from its submit
+        handler, never from a useEffect on mount."""
+        from pathlib import Path
+        src = Path(__file__).resolve().parents[2] / "frontend" / "src" / "pages" / "ResetPassword.jsx"
+        text = src.read_text()
+        assert "useEffect" not in text, "ResetPassword.jsx should not validate/consume the token on mount"
 
 
 class TestRegistrationStillWorksWithoutEmailVerification:

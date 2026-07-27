@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
@@ -14,6 +15,8 @@ from app.database import get_db
 from app.email import send_email
 from app.models import PasswordResetToken, User
 from app.security import hash_password, verify_password
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -264,7 +267,15 @@ def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
 
     token_row = db.query(PasswordResetToken).filter_by(token_hash=_hash_token(body.token)).first()
     now = datetime.now(timezone.utc)
-    if token_row is None or token_row.used_at is not None or _aware(token_row.expires_at) < now:
+
+    if token_row is None:
+        logger.info("Password reset rejected: token hash not found (invalid).")
+        raise invalid
+    if token_row.used_at is not None:
+        logger.info("Password reset rejected: token %d already used at %s.", token_row.id, token_row.used_at)
+        raise invalid
+    if _aware(token_row.expires_at) < now:
+        logger.info("Password reset rejected: token %d expired at %s (now=%s).", token_row.id, token_row.expires_at, now)
         raise invalid
 
     user = db.query(User).filter_by(id=token_row.user_id).first()
