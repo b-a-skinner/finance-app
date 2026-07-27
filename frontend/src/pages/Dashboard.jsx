@@ -105,6 +105,76 @@ function DashPrompt({ to, children }) {
   );
 }
 
+// Mandatory gate shown on first entry to the personal side, before any income has
+// been recorded. Auto-creates the user's first income source on submit — the same
+// behaviour that used to run at registration, just relocated to here.
+function IncomeGate({ onDone }) {
+  const { apiFetch } = useAuth();
+  const [salary, setSalary] = useState('');
+  const [error,  setError]  = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    const val = parseFloat(salary);
+    if (!salary || isNaN(val) || val <= 0) {
+      setError('Please enter your gross annual salary to continue.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await apiFetch('/api/income', {
+        method: 'POST',
+        body: JSON.stringify({ label: 'Main salary', gross_annual_salary: val, pay_frequency: 'monthly' }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.detail || 'Failed to save. Please try again.');
+        return;
+      }
+      onDone();
+    } catch {
+      setError('Network error — please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="auth-page">
+      <div className="auth-card">
+        <p className="auth-wordmark">fivera</p>
+        <h1>What&rsquo;s your salary?</h1>
+        <p className="auth-subtitle">We use this to calculate your exact take-home pay</p>
+
+        <form onSubmit={handleSubmit} noValidate>
+          {error && <div className="error-banner">{error}</div>}
+
+          <div className="form-group">
+            <label htmlFor="gate-salary">Gross annual salary (£)</label>
+            <input
+              id="gate-salary"
+              type="number"
+              min="0"
+              step="1"
+              value={salary}
+              onChange={e => setSalary(e.target.value)}
+              placeholder="e.g. 45000"
+              autoFocus
+            />
+            <span className="form-hint" style={{ marginTop: '0.1rem', fontStyle: 'italic' }}>You can change this later</span>
+          </div>
+
+          <button type="submit" className="btn-primary" disabled={saving}>
+            {saving ? 'Saving…' : 'Continue'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { apiFetch } = useAuth();
   const navigate = useNavigate();
@@ -193,6 +263,17 @@ export default function Dashboard() {
 
   const hasIncome = t.gross_annual > 0;
   const period    = changes?.weekly ?? changes?.monthly ?? null;
+
+  // First entry to the personal side with no income recorded yet — gate the
+  // dashboard behind mandatory salary entry (subsequent visits skip this).
+  if (!hasIncome) {
+    return (
+      <>
+        <NavBar />
+        <IncomeGate onDone={() => { fetchSummary(); fetchChanges(); }} />
+      </>
+    );
+  }
 
   function formatRunway(months) {
     const whole = Math.floor(months);

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { API_BASE } from '../utils/config';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -20,24 +19,13 @@ function EyeIcon({ visible }) {
   );
 }
 
-async function createInitialIncome(salary) {
-  const token = localStorage.getItem('token');
-  if (!token) return;
-  await fetch(`${API_BASE}/api/income`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ label: 'Main salary', gross_annual_salary: parseFloat(salary), pay_frequency: 'monthly' }),
-  });
-}
-
 export default function Register() {
-  const { register, login } = useAuth();
+  const { register, login, loadModeFromServer } = useAuth();
   const navigate = useNavigate();
 
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [showPw,   setShowPw]   = useState(false);
-  const [salary,   setSalary]   = useState('');
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
 
@@ -45,8 +33,6 @@ export default function Register() {
     if (!email || !password) return 'Please fill in email and password.';
     if (!EMAIL_RE.test(email)) return 'Please enter a valid email address.';
     if (password.length < 8)  return 'Password must be at least 8 characters.';
-    if (!salary || isNaN(parseFloat(salary)) || parseFloat(salary) <= 0)
-      return 'Please enter your gross annual salary to continue.';
     return null;
   }
 
@@ -59,8 +45,9 @@ export default function Register() {
     try {
       await register(email, password);
       await login(email, password);
-      await createInitialIncome(salary);
-      navigate('/choose-mode', { replace: true });
+      const mode = await loadModeFromServer();
+      // Business is the front door — same landing rule as a normal login.
+      navigate(mode === 'personal' ? '/personal' : '/', { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -112,21 +99,6 @@ export default function Register() {
                 <EyeIcon visible={showPw} />
               </button>
             </div>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="salary">Gross annual salary (£)</label>
-            <input
-              id="salary"
-              type="number"
-              min="0"
-              step="1"
-              value={salary}
-              onChange={e => setSalary(e.target.value)}
-              placeholder="e.g. 45000"
-            />
-            <span className="form-hint">We use this to calculate your exact take-home pay</span>
-            <span className="form-hint" style={{ marginTop: '0.1rem', fontStyle: 'italic' }}>You can change this later</span>
           </div>
 
           <button type="submit" className="btn-primary" disabled={loading}>
