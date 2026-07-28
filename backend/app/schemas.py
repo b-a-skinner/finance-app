@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 
 from app.models.finance import PayFrequency
 
@@ -222,6 +222,15 @@ class ProfileUpdate(BaseModel):
     postcode_outward: str | None = None
     business_type: str | None = None
 
+    # Invoicing — sender/payment details shown on generated invoice PDFs
+    business_name: str | None = None
+    business_address: str | None = None
+    bank_account_name: str | None = None
+    bank_sort_code: str | None = None
+    bank_account_number: str | None = None
+    vat_registered: bool | None = None
+    vat_number: str | None = None
+
     @field_validator("postcode_outward")
     @classmethod
     def validate_postcode_outward(cls, v: str | None) -> str | None:
@@ -236,6 +245,11 @@ class ProfileUpdate(BaseModel):
             )
         return normalised
 
+    @field_validator("vat_number")
+    @classmethod
+    def validate_vat_number(cls, v: str | None) -> str | None:
+        return v.strip() or None if v is not None else None
+
 
 class ProfileOut(BaseModel):
     first_name: str | None
@@ -245,6 +259,13 @@ class ProfileOut(BaseModel):
     region: str | None
     active_mode: str | None
     business_type: str | None
+    business_name: str | None
+    business_address: str | None
+    bank_account_name: str | None
+    bank_sort_code: str | None
+    bank_account_number: str | None
+    vat_registered: bool
+    vat_number: str | None
 
 
 class ModeUpdate(BaseModel):
@@ -348,6 +369,7 @@ class BusinessIncomeOut(BaseModel):
     is_approved: bool
     recurrence_freq: str | None = None
     recurrence_end_date: date | None = None
+    invoice_id: int | None = None
 
 
 class BusinessExpenseCreate(BaseModel):
@@ -481,3 +503,87 @@ class BusinessSummaryOut(BaseModel):
     mileage_crossover_msg: str | None
     mileage_attribution: dict[int, float] = {}  # entry_id → attributed allowance
     tax_estimate: SoleTraderTaxOut | None = None
+
+
+# ---------------------------------------------------------------------------
+# Invoicing — Contacts, Invoices, Line Items
+# ---------------------------------------------------------------------------
+
+VAT_RATE = 0.20  # UK standard rate. Not user- or year-configurable in v1 (see PATCH notes).
+
+
+class ContactCreate(BaseModel):
+    name: str
+    address: str | None = None
+    email: str | None = None
+
+
+class ContactUpdate(BaseModel):
+    name: str | None = None
+    address: str | None = None
+    email: str | None = None
+
+
+class ContactOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    address: str | None
+    email: str | None
+
+
+class InvoiceLineItemCreate(BaseModel):
+    description: str
+    quantity: float
+    unit_price: float
+
+
+class InvoiceLineItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    description: str
+    quantity: float
+    unit_price: float
+
+    @computed_field
+    @property
+    def line_total(self) -> float:
+        return round(self.quantity * self.unit_price, 2)
+
+
+class InvoiceCreate(BaseModel):
+    contact_id: int
+    issue_date: date
+    due_date: date
+    notes: str | None = None
+    line_items: list[InvoiceLineItemCreate]
+    status: Literal['draft', 'sent'] = 'draft'
+
+
+class InvoiceUpdate(BaseModel):
+    contact_id: int | None = None
+    issue_date: date | None = None
+    due_date: date | None = None
+    notes: str | None = None
+    line_items: list[InvoiceLineItemCreate] | None = None
+
+
+class MarkPaidBody(BaseModel):
+    paid_date: date | None = None  # defaults to today if omitted
+
+
+class InvoiceOut(BaseModel):
+    id: int
+    invoice_number: str
+    contact: ContactOut
+    issue_date: date
+    due_date: date
+    status: Literal['draft', 'sent', 'paid']
+    effective_status: Literal['draft', 'sent', 'paid', 'overdue']  # status, with "overdue" derived — never stored
+    paid_date: date | None
+    notes: str | None
+    vat_registered: bool
+    line_items: list[InvoiceLineItemOut]
+    subtotal: float
+    vat_amount: float
+    total: float

@@ -10,6 +10,7 @@ from app.models.base import TimestampMixin
 if TYPE_CHECKING:
     # Imported only for static analysis — avoids circular imports at runtime
     from app.models.finance import Asset, BusinessExpense, BusinessIncome, Debt, Expense, IncomeSource, PensionPot, SavingsGoal
+    from app.models.invoice import Contact, Invoice
 
 
 class User(TimestampMixin, Base):
@@ -26,6 +27,15 @@ class User(TimestampMixin, Base):
     postcode_outward: Mapped[str | None] = mapped_column(String(10), nullable=True)
     active_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
     business_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    # Invoicing — sender details shown on generated invoice PDFs
+    business_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    business_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bank_account_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    bank_sort_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    bank_account_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    vat_registered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    vat_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # JWTs issued before this timestamp are rejected — the only way to invalidate
     # existing sessions with a stateless JWT setup that has no revocation store.
@@ -45,3 +55,5 @@ class User(TimestampMixin, Base):
     assets: Mapped[list["Asset"]] = relationship(back_populates="user")
     business_income: Mapped[list["BusinessIncome"]] = relationship(back_populates="user")
     business_expenses: Mapped[list["BusinessExpense"]] = relationship(back_populates="user")
+    contacts: Mapped[list["Contact"]] = relationship(back_populates="user")
+    invoices: Mapped[list["Invoice"]] = relationship(back_populates="user")

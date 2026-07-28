@@ -225,21 +225,37 @@ body {
 }
 
 .form-group input,
+.form-group textarea,
 input[type="date"] {
   width: 100%;
   padding: 0.625rem 0.875rem;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   font-size: 1rem;
+  font-family: inherit;
   color: var(--color-text);
   background: var(--color-surface);
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
+  resize: vertical;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group textarea:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(26, 58, 92, 0.1);
+}
+
+.checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: auto;
+  margin: 0;
 }
 
 .btn-primary {
@@ -2838,4 +2854,126 @@ button.checklist-link {
 .choose-business-type-submit {
   width: 100%;
   max-width: 480px;
+}
+
+/* ── Invoicing ──────────────────────────────────────────────────────── */
+
+.badge-invoice-draft {
+  background: #f3f4f6;
+  color: var(--color-text-muted);
+}
+
+.badge-invoice-sent {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.badge-invoice-paid {
+  background: #d1fae5;
+  color: var(--color-positive);
+}
+
+.badge-invoice-overdue {
+  background: #fee2e2;
+  color: var(--color-negative);
+}
+
+.invoice-line-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.invoice-line-items-header {
+  display: grid;
+  grid-template-columns: 1fr 80px 110px 72px;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  padding: 0 0.1rem;
+}
+
+.invoice-line-item-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 110px 72px;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.invoice-line-item-row input {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 640px) {
+  .invoice-line-items-header { display: none; }
+  .invoice-line-item-row {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "desc desc" "qty price" "remove remove";
+    gap: 0.4rem;
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.25rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .invoice-line-item-row input:nth-child(1) { grid-area: desc; }
+  .invoice-line-item-row input:nth-child(2) { grid-area: qty; }
+  .invoice-line-item-row input:nth-child(3) { grid-area: price; }
+  .invoice-line-item-row button { grid-area: remove; }
+}
+
+.invoice-dates-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.invoice-totals {
+  margin: 1.25rem 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.invoice-totals-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.invoice-totals-row--final {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.invoice-mark-paid-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.invoice-mark-paid-row input[type="date"] {
+  flex: 1;
+}
+
+.chase-message-box {
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  resize: vertical;
 }

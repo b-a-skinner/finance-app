@@ -1,6 +1,6 @@
 import dataclasses
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -23,7 +23,26 @@ def _to_out(user: User) -> ProfileOut:
         region=get_region_from_postcode(user.postcode_outward),
         active_mode=user.active_mode,
         business_type=user.business_type,
+        business_name=user.business_name,
+        business_address=user.business_address,
+        bank_account_name=user.bank_account_name,
+        bank_sort_code=user.bank_sort_code,
+        bank_account_number=user.bank_account_number,
+        vat_registered=user.vat_registered,
+        vat_number=user.vat_number,
     )
+
+
+def _check_vat_consistency(user: User) -> None:
+    """VAT number is only meaningful (and only shown on invoices) when the user
+    is VAT registered — enforced here rather than in the schema because it
+    depends on the merged post-update state, not just the fields present in
+    any single partial-update request."""
+    if user.vat_registered and not (user.vat_number or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="VAT number is required when VAT registered is enabled.",
+        )
 
 
 @router.get("", response_model=ProfileOut)
@@ -39,6 +58,7 @@ def update_profile(
 ):
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(current_user, field, value)
+    _check_vat_consistency(current_user)
     db.commit()
     db.refresh(current_user)
     return _to_out(current_user)
@@ -52,6 +72,7 @@ def patch_profile(
 ):
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(current_user, field, value)
+    _check_vat_consistency(current_user)
     db.commit()
     db.refresh(current_user)
     return _to_out(current_user)

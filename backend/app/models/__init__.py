@@ -2,12 +2,16 @@
 # before Alembic or any other code that depends on it runs.
 from app.models.config import AgeBenchmarkPension, AgeBenchmarkSalary, BusinessTaxConfig, OccupationCode, OccupationSalaryBenchmark, RegionalSalaryBenchmark, StudentLoanPlanConfig, TaxYearConfig
 from app.models.finance import Asset, AssetType, BusinessExpense, BusinessExpenseCategory, BusinessIncome, Debt, Expense, FinancialSnapshot, IncomeSource, PayFrequency, PensionPot, SavingsGoal
+from app.models.invoice import Contact, Invoice, InvoiceLineItem
 from app.models.password_reset import PasswordResetToken
 from app.models.user import User
 
 __all__ = [
     "User",
     "PasswordResetToken",
+    "Contact",
+    "Invoice",
+    "InvoiceLineItem",
     "TaxYearConfig",
     "BusinessTaxConfig",
     "StudentLoanPlanConfig",

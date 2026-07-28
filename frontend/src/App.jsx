@@ -4,6 +4,8 @@ import Assets from './pages/Assets';
 import Business from './pages/Business';
 import Transactions from './pages/Transactions';
 import Upcoming from './pages/Upcoming';
+import Invoices from './pages/Invoices';
+import InvoiceForm from './pages/InvoiceForm';
 import ChooseMode from './pages/ChooseMode';
 import ChooseBusinessType from './pages/ChooseBusinessType';
 import Dashboard from './pages/Dashboard';
@@ -44,6 +46,9 @@ export default function App() {
           <Route path="/" element={<P><Business /></P>} />
           <Route path="/transactions" element={<P><Transactions /></P>} />
           <Route path="/upcoming" element={<P><Upcoming /></P>} />
+          <Route path="/invoices" element={<P><Invoices /></P>} />
+          <Route path="/invoices/new" element={<P><InvoiceForm /></P>} />
+          <Route path="/invoices/:id" element={<P><InvoiceForm /></P>} />
           <Route path="/profile" element={<P><BusinessProfile /></P>} />
 
           {/* Personal — subordinate, nested under /personal */}

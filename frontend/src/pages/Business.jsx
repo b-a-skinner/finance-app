@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import { useAuth } from '../context/AuthContext';
 import { gbp } from '../utils/format';
@@ -25,6 +25,7 @@ export default function Business() {
   const [currentTaxConfig, setCurrentTaxConfig] = useState(null); // always this tax year — for the add-entry modals, which default to today's date
   const [taxYears,     setTaxYears]     = useState([]);
   const [selectedYear, setSelectedYear] = useState('');
+  const [overdueInvoices, setOverdueInvoices] = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [modal,      setModal]      = useState(null);
   const [editItem,   setEditItem]   = useState(null);
@@ -47,16 +48,18 @@ export default function Business() {
   }, [apiFetch]);
 
   const fetchAll = useCallback(async () => {
-    const [iRes, eRes, yrRes, curCfgRes] = await Promise.all([
+    const [iRes, eRes, yrRes, curCfgRes, invRes] = await Promise.all([
       apiFetch('/api/business/income'),
       apiFetch('/api/business/expenses'),
       apiFetch('/api/business/tax-years'),
       apiFetch('/api/business/tax-config'),
+      apiFetch('/api/business/invoices'),
     ]);
     if (iRes.ok) setIncome(await iRes.json());
     if (eRes.ok) setExpenses(await eRes.json());
     if (yrRes.ok) setTaxYears((await yrRes.json()).years);
     setCurrentTaxConfig(curCfgRes.ok ? await curCfgRes.json() : null);
+    if (invRes.ok) setOverdueInvoices((await invRes.json()).filter(i => i.effective_status === 'overdue'));
     await fetchForYear(selectedYear);
     setLoading(false);
   }, [apiFetch, fetchForYear, selectedYear]);
@@ -151,6 +154,17 @@ export default function Business() {
           <p className="tax-config-missing-banner">
             Tax rates for {summary.tax_year} haven&rsquo;t been added yet — allowable expenses, mileage
             allowance, and the tax bill estimate for this year may be incomplete.
+          </p>
+        )}
+
+        {overdueInvoices.length > 0 && (
+          <p className="tax-config-missing-banner">
+            {overdueInvoices.length === 1 ? (
+              <>Invoice {overdueInvoices[0].invoice_number} to {overdueInvoices[0].contact.name} is overdue.</>
+            ) : (
+              <>{overdueInvoices.length} invoices are overdue.</>
+            )}{' '}
+            <Link to="/invoices">Chase them →</Link>
           </p>
         )}
 

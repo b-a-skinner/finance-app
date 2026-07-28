@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import BusinessExpense, BusinessIncome
+from app.models import BusinessExpense, BusinessIncome, Invoice
 from app.models.config import BusinessTaxConfig, TaxYearConfig
 from app.services.tax_calculator import calculate_payments_on_account, calculate_sole_trader_tax
 from app.models.user import User
@@ -357,6 +357,18 @@ def approve_income(
             item.date_received = body.date_received
         if item.date_received <= date.today():
             item.is_approved = True
+
+    # Invoice-linked income rows are never recurring (see
+    # app/routes/invoices.py: _get_or_create_invoice_income), so approving one
+    # here — via the exact same confirmation flow as any other income entry —
+    # is how a sent invoice becomes "paid" whether the user confirms it from
+    # here (Upcoming) or from the invoice's own "Mark as paid" action. Keeps
+    # the invoice and its one linked income row from ever disagreeing.
+    if item.invoice_id and item.is_approved:
+        invoice = db.query(Invoice).filter_by(id=item.invoice_id).first()
+        if invoice is not None:
+            invoice.status = "paid"
+            invoice.paid_date = item.date_received
 
     db.commit()
     db.refresh(item)

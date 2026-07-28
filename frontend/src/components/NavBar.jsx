@@ -17,6 +17,7 @@ const BUSINESS_LINKS = [
   { to: '/',             label: 'Dashboard' },
   { to: '/transactions', label: 'Transactions' },
   { to: '/upcoming',     label: 'Upcoming' },
+  { to: '/invoices',     label: 'Invoices' },
   { to: '/profile',      label: 'Profile' },
 ];
 
