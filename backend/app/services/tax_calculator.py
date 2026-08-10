@@ -50,6 +50,10 @@ class SoleTraderTaxBreakdown:
     class2_status: str          # "covered" | "covered_no_class4" | "below_threshold"
     class2_due: float           # always 0 — Class 2 is auto-granted or voluntary only
     class2_voluntary_note: str | None
+    student_loan_additional: float       # additional repayment triggered by profit, on top of starting_income's own
+    starting_income: float               # other income (e.g. employed salary) the profit is stacked on — 0.0 if none
+    paye_tax_on_starting_income: float   # income tax on starting_income alone — informational only; already netted
+                                          # out of income_tax_on_profit below (via subtraction), never added again
     total_set_aside: float
     effective_rate: float
 
@@ -172,22 +176,35 @@ def calculate_sole_trader_tax(
     tax_cfg: TaxConfig,
     biz_cfg: BizTaxConfig,
     starting_income: float = 0.0,
+    student_loan_plans: list | None = None,
 ) -> SoleTraderTaxBreakdown:
     """
-    Income tax + Class 4 NI + Class 2 position for a sole trader.
+    Income tax + Class 4 NI + Class 2 position + student loan for a sole
+    trader, combined with any other income they already have (e.g. an
+    employed salary) — starting_income.
 
-    Income tax is the marginal slice on [starting_income, starting_income + profit],
-    computed as calculate_income_tax(starting_income + profit) − calculate_income_tax(starting_income).
-    With the default starting_income=0 this equals income_tax(profit), but the difference
-    form means passing a real starting_income later is a one-line change at the call site.
+    Every "additional owed" figure here (income tax, student loan) is a
+    marginal DELTA on [starting_income, starting_income + profit] — combined
+    minus starting-income-alone — never a flat total on the combined figure.
+    That delta form is what keeps these numbers from double-counting tax/
+    repayments already collected via PAYE/payroll on starting_income: with
+    the default starting_income=0 (no other income), every delta collapses to
+    calculate_X(profit) exactly as before this feature existed, so a
+    full-time creator sees unchanged figures.
+
+    Class 4 NI and Class 2 status are NOT delta'd — HMRC calculates both on
+    self-employment profit alone, with no interaction with employment income
+    or Class 1 NI already paid (the one gap this doesn't cover: the annual
+    Class 1/Class 4 NI maximum — see the frontend disclaimer).
 
     All rates and thresholds come from config — none are hardcoded here.
     """
-    income_tax_on_profit = round(
-        calculate_income_tax(starting_income + taxable_profit, tax_cfg)
-        - calculate_income_tax(starting_income, tax_cfg),
-        2,
-    )
+    if student_loan_plans is None:
+        student_loan_plans = []
+
+    tax_on_combined = calculate_income_tax(starting_income + taxable_profit, tax_cfg)
+    tax_on_starting_income = calculate_income_tax(starting_income, tax_cfg)
+    income_tax_on_profit = round(tax_on_combined - tax_on_starting_income, 2)
 
     # Class 4 NI: slice calculation on profit
     class4 = 0.0
@@ -198,7 +215,7 @@ def calculate_sole_trader_tax(
         class4 += (taxable_profit - biz_cfg.class4_upper_limit) * biz_cfg.class4_upper_rate
     class4 = round(class4, 2)
 
-    # Class 2 position
+    # Class 2 position (profit alone — no interaction with other income)
     class2_note: str | None = None
     if taxable_profit >= biz_cfg.class4_lower_limit:
         class2_status = "covered"
@@ -212,7 +229,17 @@ def calculate_sole_trader_tax(
             f"£{annual_voluntary:.2f}/year) could protect your State Pension record."
         )
 
-    total_set_aside = round(income_tax_on_profit + class4, 2)
+    # Student loan: same delta principle as income tax above — the additional
+    # repayment triggered by profit, on top of whatever the same formula
+    # already produces on starting_income alone (a proxy for "collected via
+    # payroll" — this app doesn't track actual payroll deductions, so this is
+    # the standard simplifying assumption, consistent with how starting_income
+    # itself stands in for PAYE elsewhere in this function).
+    student_loan_on_combined = calculate_student_loan_repayment(starting_income + taxable_profit, student_loan_plans)
+    student_loan_on_starting_income = calculate_student_loan_repayment(starting_income, student_loan_plans)
+    student_loan_additional = round(student_loan_on_combined - student_loan_on_starting_income, 2)
+
+    total_set_aside = round(income_tax_on_profit + class4 + student_loan_additional, 2)
     effective_rate = round(total_set_aside / taxable_profit, 4) if taxable_profit > 0 else 0.0
 
     return SoleTraderTaxBreakdown(
@@ -222,6 +249,9 @@ def calculate_sole_trader_tax(
         class2_status=class2_status,
         class2_due=0.0,
         class2_voluntary_note=class2_note,
+        student_loan_additional=student_loan_additional,
+        starting_income=starting_income,
+        paye_tax_on_starting_income=tax_on_starting_income,
         total_set_aside=total_set_aside,
         effective_rate=effective_rate,
     )

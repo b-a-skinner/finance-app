@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import BusinessExpense, BusinessIncome, Invoice
+from app.models import BusinessExpense, BusinessIncome, Debt, IncomeSource, Invoice
 from app.models.config import BusinessTaxConfig, TaxYearConfig
 from app.services.tax_calculator import calculate_payments_on_account, calculate_sole_trader_tax
 from app.models.user import User
@@ -714,7 +714,29 @@ def _build_summary(db: Session, current_user: User, label: str) -> BusinessSumma
     # Sole trader tax estimate — requires both configs and Class 4 fields seeded
     tax_estimate: SoleTraderTaxOut | None = None
     if cfg and tax_cfg and cfg.class4_lower_limit is not None:
-        calc = calculate_sole_trader_tax(taxable_profit, tax_cfg, cfg, starting_income=0.0)
+        # Combined-tax stacking: self-employment profit is taxed at the user's
+        # true marginal rate given any other income they already have (e.g. an
+        # employed salary), not from a standalone £0 baseline. Pulled from the
+        # same personal-side records used on the personal dashboard (no access
+        # barrier — active_mode is a frontend concern only). This is always the
+        # user's CURRENT income/loan data, regardless of which tax year this
+        # summary is for — the app has no historical per-year salary record, so
+        # this is the best available approximation for a prior year too.
+        starting_income = round(sum(
+            src.gross_annual_salary
+            for src in db.query(IncomeSource).filter_by(user_id=current_user.id, is_active=True).all()
+        ), 2)
+        student_loan_debts = (
+            db.query(Debt)
+            .filter_by(user_id=current_user.id, debt_type="student_loan", is_active=True)
+            .all()
+        )
+        student_loan_plans = [d.student_loan_plan for d in student_loan_debts if d.student_loan_plan is not None]
+
+        calc = calculate_sole_trader_tax(
+            taxable_profit, tax_cfg, cfg,
+            starting_income=starting_income, student_loan_plans=student_loan_plans,
+        )
         tax_estimate = SoleTraderTaxOut(**vars(calc))
 
     return BusinessSummaryOut(

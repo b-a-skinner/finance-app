@@ -310,3 +310,65 @@ class TestCalculatePaymentsOnAccount:
         poa = calculate_payments_on_account(bill_lcy=1000.0, poa_threshold=1000.0)
         assert poa.poa_triggered is False
         assert poa.balancing_payment == pytest.approx(1000.0)
+
+
+# ---------------------------------------------------------------------------
+# calculate_sole_trader_tax — combined personal + business tax (pure-function
+# level; end-to-end worked examples via the API live in test_business.py's
+# TestCombinedTax).
+# ---------------------------------------------------------------------------
+
+class TestSoleTraderTaxCombined:
+    @pytest.fixture
+    def tax_cfg(self):
+        return SimpleNamespace(
+            personal_allowance=12_570, basic_rate_threshold=50_270, basic_rate_pct=20,
+            higher_rate_threshold=125_140, higher_rate_pct=40, additional_rate_pct=45,
+            ni_primary_threshold=12_584, ni_upper_threshold=50_284, ni_main_rate_pct=8, ni_upper_rate_pct=2,
+            pension_qualifying_lower=6_240, pension_qualifying_upper=50_270,
+        )
+
+    @pytest.fixture
+    def biz_cfg(self):
+        return SimpleNamespace(
+            class4_lower_limit=12_570, class4_upper_limit=50_270,
+            class4_main_rate=0.06, class4_upper_rate=0.02,
+            class2_small_profits_threshold=7_105, class2_weekly_rate=3.65,
+        )
+
+    def test_no_student_loan_plans_defaults_to_empty_list(self, tax_cfg, biz_cfg):
+        """student_loan_plans=None (the default) must not raise — behaves as no plans."""
+        result = calculate_sole_trader_tax(20_000, tax_cfg, biz_cfg)
+        assert result.student_loan_additional == 0.0
+
+    def test_student_loan_additional_is_a_delta(self, tax_cfg, biz_cfg):
+        plan = SimpleNamespace(threshold=25_000.0, repayment_rate_pct=9.0)
+        result = calculate_sole_trader_tax(
+            15_000, tax_cfg, biz_cfg, starting_income=40_000.0, student_loan_plans=[plan],
+        )
+        # (55,000-25,000)*9% - (40,000-25,000)*9% = 2,700 - 1,350 = 1,350
+        assert result.student_loan_additional == pytest.approx(1350.0)
+
+    def test_paye_tax_on_starting_income_exposed_and_not_double_counted(self, tax_cfg, biz_cfg):
+        result = calculate_sole_trader_tax(20_000, tax_cfg, biz_cfg, starting_income=30_000.0)
+        assert result.starting_income == 30_000.0
+        assert result.paye_tax_on_starting_income == pytest.approx(3486.0)  # (30,000-12,570)*20%
+        # income_tax_on_profit is ALREADY net of paye_tax_on_starting_income (subtracted,
+        # not added) — total_set_aside must not add it again.
+        assert result.total_set_aside == pytest.approx(result.income_tax_on_profit + result.class4_ni)
+
+    def test_zero_starting_income_unchanged_from_pre_feature_behaviour(self, tax_cfg, biz_cfg):
+        with_zero = calculate_sole_trader_tax(20_000, tax_cfg, biz_cfg, starting_income=0.0)
+        default = calculate_sole_trader_tax(20_000, tax_cfg, biz_cfg)
+        assert with_zero.income_tax_on_profit == default.income_tax_on_profit
+        assert with_zero.paye_tax_on_starting_income == 0.0
+        assert with_zero.student_loan_additional == 0.0
+
+    def test_total_set_aside_includes_student_loan(self, tax_cfg, biz_cfg):
+        plan = SimpleNamespace(threshold=25_000.0, repayment_rate_pct=9.0)
+        result = calculate_sole_trader_tax(
+            15_000, tax_cfg, biz_cfg, starting_income=40_000.0, student_loan_plans=[plan],
+        )
+        assert result.total_set_aside == pytest.approx(
+            result.income_tax_on_profit + result.class4_ni + result.student_loan_additional
+        )

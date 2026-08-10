@@ -464,6 +464,9 @@ class SoleTraderTaxOut(BaseModel):
     class2_status: str          # "covered" | "covered_no_class4" | "below_threshold"
     class2_due: float
     class2_voluntary_note: str | None
+    student_loan_additional: float       # additional student loan repayment triggered by profit
+    starting_income: float               # other income (e.g. salary) the profit is stacked on — 0.0 if none
+    paye_tax_on_starting_income: float   # informational: tax already paid via PAYE on starting_income
     total_set_aside: float
     effective_rate: float
 

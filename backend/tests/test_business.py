@@ -1566,6 +1566,281 @@ class TestSoleTraderTax:
 
 
 # ---------------------------------------------------------------------------
+# Combined personal + business tax — self-employment profit stacked on the
+# user's REAL other income (employed salary) via the starting_income seam,
+# plus student loan on combined income. Every figure here is a DELTA
+# (combined minus starting-income-alone) so nothing already collected via
+# PAYE/payroll on the salary gets counted again in "set aside".
+# ---------------------------------------------------------------------------
+
+PERSONAL_INCOME_URL = "/api/income"
+DEBTS_URL = "/api/debts"
+
+
+class TestCombinedTax:
+    def _add_salary(self, client, h, annual):
+        r = client.post(PERSONAL_INCOME_URL, json={
+            "label": "Job", "gross_annual_salary": annual, "pay_frequency": "monthly",
+        }, headers=h)
+        assert r.status_code == 201, r.json()
+
+    def _add_business_profit(self, client, h, amount, d):
+        r = client.post(INCOME_URL, json={"amount": amount, "date_received": d}, headers=h)
+        assert r.status_code == 201, r.json()
+
+    def _add_student_loan(self, client, h, db, threshold, rate_pct=9.0):
+        from app.models.config import StudentLoanPlanConfig
+        plan = StudentLoanPlanConfig(
+            plan_name="Plan 2", tax_year=_tax_year_label_for_today(), threshold=threshold,
+            repayment_rate_pct=rate_pct, write_off_years=30,
+        )
+        db.add(plan)
+        db.commit()
+        db.refresh(plan)
+        r = client.post(DEBTS_URL, json={
+            "debt_type": "student_loan", "balance": 20000.0, "interest_rate": 0.0,
+            "min_payment": 0.0, "student_loan_plan_id": plan.id, "graduation_year": 2019,
+        }, headers=h)
+        assert r.status_code == 201, r.json()
+
+    def test_no_other_income_matches_unchanged_isolated_behaviour(self, client, db):
+        """Regression check: a full-time creator with no salary gets the exact
+        same figures as before this feature — starting_income and every
+        delta-baseline collapse to zero."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_business_profit(client, h, 20000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        assert te["starting_income"] == 0.0
+        assert te["paye_tax_on_starting_income"] == 0.0
+        assert te["student_loan_additional"] == 0.0
+        assert te["income_tax_on_profit"] == pytest.approx((20000 - 12570) * 0.20)  # unchanged from test_20k_profit
+
+    def test_salary_plus_profit_taxed_at_combined_marginal_rate(self, client, db):
+        """£30k salary + £20k profit: additional income tax owed on the profit
+        = income_tax(50k) − income_tax(30k), NOT income_tax(20k) in isolation."""
+        from app.services.tax_calculator import calculate_income_tax
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_salary(client, h, 30000.0)
+        self._add_business_profit(client, h, 20000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+
+        tax_ns = SimpleNamespace(
+            personal_allowance=12570, basic_rate_threshold=50270, basic_rate_pct=20,
+            higher_rate_threshold=125140, higher_rate_pct=40, additional_rate_pct=45,
+            ni_primary_threshold=12584, ni_upper_threshold=50284,
+            ni_main_rate_pct=8, ni_upper_rate_pct=2,
+            pension_qualifying_lower=6240, pension_qualifying_upper=50270,
+        )
+        expected_additional = round(calculate_income_tax(50000, tax_ns) - calculate_income_tax(30000, tax_ns), 2)
+        isolated_wrong_answer = calculate_income_tax(20000, tax_ns)
+
+        assert te["starting_income"] == pytest.approx(30000.0)
+        assert te["income_tax_on_profit"] == pytest.approx(expected_additional)
+        assert te["income_tax_on_profit"] == pytest.approx(4000.0)  # (50,000-12,570)*20% - (30,000-12,570)*20%
+        assert te["income_tax_on_profit"] != pytest.approx(isolated_wrong_answer)
+
+    def test_paye_paid_reconciles_exactly_with_no_double_counting(self, client, db):
+        """paye_tax_on_starting_income + income_tax_on_profit == tax on the
+        full combined income, exactly — proves nothing is double-counted or
+        dropped by the delta form."""
+        from app.services.tax_calculator import calculate_income_tax
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_salary(client, h, 30000.0)
+        self._add_business_profit(client, h, 20000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+
+        tax_ns = SimpleNamespace(
+            personal_allowance=12570, basic_rate_threshold=50270, basic_rate_pct=20,
+            higher_rate_threshold=125140, higher_rate_pct=40, additional_rate_pct=45,
+            ni_primary_threshold=12584, ni_upper_threshold=50284,
+            ni_main_rate_pct=8, ni_upper_rate_pct=2,
+            pension_qualifying_lower=6240, pension_qualifying_upper=50270,
+        )
+        assert te["paye_tax_on_starting_income"] == pytest.approx(3486.0)  # (30,000-12,570)*20%
+        assert te["income_tax_on_profit"] == pytest.approx(4000.0)
+        tax_on_everything = calculate_income_tax(50000, tax_ns)
+        assert te["paye_tax_on_starting_income"] + te["income_tax_on_profit"] == pytest.approx(tax_on_everything)
+        assert tax_on_everything == pytest.approx(7486.0)
+
+    def test_salary_pushes_profit_into_higher_rate_band(self, client, db):
+        """£45k salary + £15k profit: part of the profit crosses the £50,270
+        higher-rate boundary — the thing an isolated (profit-only) calculator
+        gets wrong by taxing the whole slice at 20%."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_salary(client, h, 45000.0)
+        self._add_business_profit(client, h, 15000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        # income_tax(60,000) - income_tax(45,000):
+        #   basic:  (50,270-12,570)*20% = 7,540.00 total on salary+profit-up-to-50,270
+        #   higher: (60,000-50,270)*40% = 3,892.00 on the slice of profit above 50,270
+        #   income_tax(60,000) = 11,432.00; income_tax(45,000) = (45,000-12,570)*20% = 6,486.00
+        #   delta = 4,946.00 — more than 15,000*20%=3,000, proving the higher-rate slice is reflected
+        assert te["income_tax_on_profit"] == pytest.approx(4946.0)
+        assert te["income_tax_on_profit"] > 15000 * 0.20
+
+    def test_student_loan_on_combined_income_is_a_delta_not_a_total(self, client, db):
+        """Plan with £25,000 threshold, £40k salary + £15k profit (combined
+        £55k). Profit ALONE (£15k) never even crosses the threshold, so an
+        isolated calculator would show £0 student loan on the profit — wrong,
+        since stacked on the salary it's fully liable. The FULL combined
+        figure (£2,700) would double-count the £1,350 already collected via
+        payroll on the salary alone. The correct additional amount is the
+        delta: £1,350."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_salary(client, h, 40000.0)
+        self._add_student_loan(client, h, db, threshold=25000.0, rate_pct=9.0)
+        self._add_business_profit(client, h, 15000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        assert te["student_loan_additional"] == pytest.approx(1350.0)  # (55,000-25,000)*9% - (40,000-25,000)*9%
+        assert te["student_loan_additional"] != pytest.approx(2700.0)  # NOT the full combined repayment
+        assert te["student_loan_additional"] != pytest.approx(0.0)     # NOT profit-alone (which is below threshold)
+
+    def test_no_student_loan_plan_means_zero_additional(self, client, db):
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_salary(client, h, 40000.0)
+        self._add_business_profit(client, h, 15000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        assert te["student_loan_additional"] == 0.0
+
+    def test_class4_ni_unaffected_by_salary(self, client, db):
+        """Class 4 NI is calculated on self-employment profit alone — HMRC
+        rules give it no interaction with employment income."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+
+        h1 = auth(client, "nosalary@test.com")
+        d = _this_year_april_6().isoformat()
+        self._add_business_profit(client, h1, 30000.0, d)
+        te_no_salary = client.get(SUMMARY_URL, headers=h1).json()["tax_estimate"]
+
+        h2 = auth(client, "withsalary@test.com")
+        self._add_salary(client, h2, 50000.0)
+        self._add_business_profit(client, h2, 30000.0, d)
+        te_with_salary = client.get(SUMMARY_URL, headers=h2).json()["tax_estimate"]
+
+        assert te_no_salary["class4_ni"] == te_with_salary["class4_ni"]
+        assert te_no_salary["class4_ni"] == pytest.approx((30000 - 12570) * 0.06)
+
+    def test_class2_status_unaffected_by_salary(self, client, db):
+        """Class 2 status is based on self-employment profit alone."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+
+        h1 = auth(client, "nosalary2@test.com")
+        d = _this_year_april_6().isoformat()
+        self._add_business_profit(client, h1, 5000.0, d)  # below small profits threshold
+        te_no_salary = client.get(SUMMARY_URL, headers=h1).json()["tax_estimate"]
+
+        h2 = auth(client, "withsalary2@test.com")
+        self._add_salary(client, h2, 60000.0)
+        self._add_business_profit(client, h2, 5000.0, d)
+        te_with_salary = client.get(SUMMARY_URL, headers=h2).json()["tax_estimate"]
+
+        assert te_no_salary["class2_status"] == te_with_salary["class2_status"] == "below_threshold"
+
+    def test_multiple_income_sources_summed_as_starting_income(self, client, db):
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        client.post(PERSONAL_INCOME_URL, json={"label": "Job A", "gross_annual_salary": 15000.0, "pay_frequency": "monthly"}, headers=h)
+        client.post(PERSONAL_INCOME_URL, json={"label": "Job B", "gross_annual_salary": 10000.0, "pay_frequency": "monthly"}, headers=h)
+        self._add_business_profit(client, h, 10000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        assert te["starting_income"] == pytest.approx(25000.0)
+
+    def test_inactive_income_source_excluded_from_starting_income(self, client, db):
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        r = client.post(PERSONAL_INCOME_URL, json={"label": "Old job", "gross_annual_salary": 30000.0, "pay_frequency": "monthly"}, headers=h)
+        client.delete(f"{PERSONAL_INCOME_URL}/{r.json()['id']}", headers=h)
+        self._add_business_profit(client, h, 20000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        assert te["starting_income"] == 0.0
+
+    def test_total_set_aside_includes_student_loan_now(self, client, db):
+        """total_set_aside == income_tax_on_profit + class4_ni + student_loan_additional."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_salary(client, h, 40000.0)
+        self._add_student_loan(client, h, db, threshold=25000.0, rate_pct=9.0)
+        self._add_business_profit(client, h, 15000.0, d)
+
+        te = client.get(SUMMARY_URL, headers=h).json()["tax_estimate"]
+        assert te["total_set_aside"] == pytest.approx(
+            te["income_tax_on_profit"] + te["class4_ni"] + te["student_loan_additional"]
+        )
+
+    def test_isolation_between_users(self, client, db):
+        """One user's salary must never leak into another user's combined figure."""
+        seed_biz_config(db)
+        seed_tax_year_config(db)
+        d = _this_year_april_6().isoformat()
+
+        alice = auth(client, "alice_combined@test.com")
+        self._add_salary(client, alice, 80000.0)
+        self._add_business_profit(client, alice, 20000.0, d)
+
+        bob = auth(client, "bob_combined@test.com")
+        self._add_business_profit(client, bob, 20000.0, d)
+
+        te_bob = client.get(SUMMARY_URL, headers=bob).json()["tax_estimate"]
+        assert te_bob["starting_income"] == 0.0
+        assert te_bob["income_tax_on_profit"] == pytest.approx((20000 - 12570) * 0.20)
+
+    def test_personal_dashboard_unaffected(self, client, db):
+        """The personal dashboard's own tax calculation (take-home pay etc.)
+        must be completely unchanged by this feature — it never sees profit."""
+        seed_tax_year_config(db)
+        h = auth(client)
+        d = _this_year_april_6().isoformat()
+        self._add_salary(client, h, 40000.0)
+        self._add_business_profit(client, h, 20000.0, d)
+
+        personal = client.get("/api/finance/summary", headers=h).json()
+        # take_home.income_tax reflects only the £40k salary — profit must not leak in.
+        from app.services.tax_calculator import calculate_income_tax
+        tax_ns = SimpleNamespace(
+            personal_allowance=12570, basic_rate_threshold=50270, basic_rate_pct=20,
+            higher_rate_threshold=125140, higher_rate_pct=40, additional_rate_pct=45,
+            ni_primary_threshold=12584, ni_upper_threshold=50284,
+            ni_main_rate_pct=8, ni_upper_rate_pct=2,
+            pension_qualifying_lower=6240, pension_qualifying_upper=50270,
+        )
+        assert personal["take_home"]["income_tax"] == pytest.approx(calculate_income_tax(40000, tax_ns))
+
+
+# ---------------------------------------------------------------------------
 # Presentation consistency — card breakdown values match the headline totals
 # ---------------------------------------------------------------------------
 

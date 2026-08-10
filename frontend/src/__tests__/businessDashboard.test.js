@@ -78,3 +78,45 @@ describe('.tax-year-select and .tax-config-missing-banner CSS', () => {
     expect(match[1]).toMatch(/#fef3c7|#fde68a/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Combined personal + business tax — the "set aside" card now reflects
+// self-employment profit stacked on the user's real other income. Source-scan
+// tests since there's no component-rendering library in this project.
+// ---------------------------------------------------------------------------
+
+describe('Business.jsx tax-hero card reflects combined-tax figures', () => {
+  const src = readFileSync(resolve(__dirname, '../pages/Business.jsx'), 'utf-8');
+
+  it('shows the "combined with other income" note only when starting_income > 0', () => {
+    expect(src).toMatch(/tax_estimate\.starting_income > 0[\s\S]{0,60}combined with/);
+  });
+
+  it('shows a student loan breakdown line only when the additional amount is nonzero', () => {
+    expect(src).toMatch(/tax_estimate\.student_loan_additional > 0[\s\S]{0,120}Student loan/);
+  });
+
+  it('shows the NI cap disclaimer only for users with both employment and self-employment income', () => {
+    const match = src.match(/tax_estimate\.starting_income > 0 &&[\s\S]{0,300}annual National Insurance maximum/);
+    expect(match).not.toBeNull();
+  });
+
+  it('the NI cap disclaimer mentions being employed and self-employed together', () => {
+    const disclaimerBlock = src.match(/annual National Insurance maximum[\s\S]{0,200}/)?.[0] ?? '';
+    expect(disclaimerBlock).toMatch(/employed and self-employed/);
+  });
+
+  it('no longer unconditionally claims the figure assumes self-employment income only', () => {
+    // That claim became false once starting_income is wired in — it must now be conditional.
+    const unconditionalClaim = /This figure assumes self-employment income only and doesn.{0,3}t account for other income/;
+    expect(src).not.toMatch(unconditionalClaim);
+  });
+
+  it('still always shows the "not tax advice" disclaimer regardless of starting_income', () => {
+    expect(src).toMatch(/This is a calculation tool, not tax advice\./);
+  });
+
+  it('the additional-owed framing appears when starting_income is present', () => {
+    expect(src).toMatch(/additional amount owed on top of what.{0,3}s already collected via PAYE/);
+  });
+});

@@ -231,12 +231,15 @@ export default function Business() {
             <div className="card biz-tax-hero">
               <p className="card-title">
                 {taxCardLabel(summary)}
-                <Tip text="Income tax + Class 4 NI on your taxable profit. Class 2 NI is shown separately — it's either automatic or voluntary." />
+                <Tip text="Income tax + Class 4 NI + student loan on your taxable profit, combined with any other income you have (like a salary) for your true marginal rate — the additional amount owed on top of what's already collected via PAYE. Class 2 NI is shown separately." />
               </p>
               <p className="biz-tax-hero-amount">{gbp(summary.tax_estimate.total_set_aside)}</p>
               <p className="biz-metric-sub">
                 {(summary.tax_estimate.effective_rate * 100).toFixed(1)}% effective rate on{' '}
                 {gbp(summary.tax_estimate.taxable_profit)} taxable profit
+                {summary.tax_estimate.starting_income > 0 && (
+                  <> · combined with {gbp(summary.tax_estimate.starting_income)} other income</>
+                )}
               </p>
               <details className="biz-tax-breakdown">
                 <summary>Show breakdown</summary>
@@ -249,6 +252,12 @@ export default function Business() {
                     <span className="breakdown-label">Class 4 NI</span>
                     <span>{gbp(summary.tax_estimate.class4_ni)}</span>
                   </li>
+                  {summary.tax_estimate.student_loan_additional > 0 && (
+                    <li>
+                      <span className="breakdown-label">Student loan</span>
+                      <span>{gbp(summary.tax_estimate.student_loan_additional)}</span>
+                    </li>
+                  )}
                   <li className="breakdown-class2">
                     <span className="breakdown-label">Class 2 NI</span>
                     <p className="biz-class2-snippet">
@@ -271,9 +280,17 @@ export default function Business() {
                   </li>
                 </ul>
               </details>
+              {summary.tax_estimate.starting_income > 0 && (
+                <p className="biz-tax-hero-disclaimer">
+                  This doesn&rsquo;t yet account for the annual National Insurance maximum that can apply
+                  when you&rsquo;re both employed and self-employed — your actual NI due may be slightly lower.
+                </p>
+              )}
               <p className="biz-tax-hero-disclaimer">
-                This figure assumes self-employment income only and doesn&rsquo;t account for other income
-                you may have. This is a calculation tool, not tax advice.
+                {summary.tax_estimate.starting_income > 0
+                  ? 'This is the additional amount owed on top of what’s already collected via PAYE on your other income.'
+                  : 'This figure assumes self-employment income only.'}{' '}
+                This is a calculation tool, not tax advice.
               </p>
             </div>
           )}
