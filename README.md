@@ -3,7 +3,7 @@
 
 A web app for UK sole traders. It shows how much tax you owe as you go, rather than finding out in January.
 
-fivera.co.uk
+www.fivera.co.uk
 
 ## The problem
 
